@@ -6,11 +6,13 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.38"
 deadpool-postgres = "0.14.0"
+fallible-iterator = "0.2.0"
 http = "0.2"
 jwtk = "0.3.0"
 nanoid = "0.4.0"
 openssl = { version = "0.10.64", features = ["vendored"] }
 postgres-openssl = "0.5.0"
+postgres-protocol = "0.6.6"
 prost = "0.12.6"
 refinery = { version = "0.8.14", features = ["tokio-postgres"] }
 reqwest = "0.11"

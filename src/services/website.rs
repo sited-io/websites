@@ -12,7 +12,7 @@ use crate::api::sited_io::websites::v1::{
 };
 use crate::auth::get_user_id;
 use crate::cloudflare::CloudflareService;
-use crate::model::Website;
+use crate::model::{Domain, Website};
 use crate::zitadel::ZitadelService;
 use crate::{datetime_to_timestamp, i64_to_u32};
 
@@ -26,17 +26,17 @@ pub struct WebsiteService {
     cloudflare_service: CloudflareService,
 }
 
+const WEBSITE_ID_LENGTH: usize = 14;
+
+const MININUM_WEBSITE_NAME_LENGTH: usize = 4;
+
+const DOMAIN_ALPHABET: [char; 36] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e',
+    'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+    'u', 'v', 'w', 'x', 'y', 'z',
+];
+
 impl WebsiteService {
-    const MININUM_WEBSITE_NAME_LENGTH: usize = 4;
-
-    const DOMAIN_ALPHABET: [char; 62] = [
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd',
-        'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
-        's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F',
-        'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-        'U', 'V', 'W', 'X', 'Y', 'Z',
-    ];
-
     fn new(
         pool: Pool,
         verifier: RemoteJwksVerifier,
@@ -77,13 +77,13 @@ impl WebsiteService {
             created_at: datetime_to_timestamp(website.created_at),
             updated_at: datetime_to_timestamp(website.updated_at),
             name: website.name,
-            domain: website.domain,
+            domains: website.domains.into_iter().map(|d| d.domain).collect(),
             client_id: website.client_id,
         }
     }
 
     fn generate_website_id(&self) -> String {
-        nanoid::nanoid!(14, &Self::DOMAIN_ALPHABET)
+        nanoid::nanoid!(WEBSITE_ID_LENGTH, &DOMAIN_ALPHABET)
     }
 
     fn build_main_domain(&self, website_id: &String) -> String {
@@ -101,7 +101,7 @@ impl website_service_server::WebsiteService for WebsiteService {
 
         let CreateWebsiteRequest { name } = request.into_inner();
 
-        if name.len() < Self::MININUM_WEBSITE_NAME_LENGTH {
+        if name.len() < MININUM_WEBSITE_NAME_LENGTH {
             return Err(Status::invalid_argument("name is too short"));
         }
 
@@ -130,18 +130,30 @@ impl website_service_server::WebsiteService for WebsiteService {
             client_id, app_id, ..
         } = res.into_inner();
 
+        let dns_record = self
+            .cloudflare_service
+            .create_dns_record(domain.clone())
+            .await?
+            .result;
+
         let created_website = Website::create(
             &self.pool,
             &website_id,
             &user_id,
             &name,
-            &domain,
             &client_id,
             &app_id,
         )
         .await?;
 
-        self.cloudflare_service.create_dns_record(domain).await?;
+        Domain::create(
+            &self.pool,
+            &website_id,
+            &user_id,
+            &domain,
+            &Some(dns_record.id),
+        )
+        .await?;
 
         Ok(Response::new(CreateWebsiteResponse {
             website: Some(self.to_response(created_website)),
@@ -232,9 +244,20 @@ impl website_service_server::WebsiteService for WebsiteService {
                 .remove_app(found_website.zitadel_app_id)
                 .await?;
 
-            self.cloudflare_service
-                .delete_dns_record(found_website.domain)
-                .await?;
+            for domain in found_website.domains {
+                if let Some(dns_record_id) = domain.cloudflare_dns_record_id {
+                    self.cloudflare_service
+                        .delete_dns_record(dns_record_id)
+                        .await?;
+                    Domain::delete(
+                        &self.pool,
+                        &website_id,
+                        &user_id,
+                        &domain.domain,
+                    )
+                    .await?;
+                }
+            }
 
             Website::delete(&self.pool, &website_id, &user_id).await?;
         }

@@ -13,9 +13,9 @@ pub struct WebsiteResponse {
     #[prost(string, tag = "5")]
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
-    pub domain: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
     pub client_id: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "7")]
+    pub domains: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

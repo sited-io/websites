@@ -3304,11 +3304,13 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "deadpool-postgres",
+ "fallible-iterator",
  "http",
  "jwtk",
  "nanoid",
  "openssl",
  "postgres-openssl",
+ "postgres-protocol",
  "prost",
  "refinery",
  "reqwest",

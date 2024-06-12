@@ -22,18 +22,18 @@ pub struct CloudflareResponses<B> {
 #[allow(unused)]
 #[derive(Debug, Deserialize)]
 pub struct CloudflareResponse<B> {
-    result: B,
+    pub result: B,
 }
 
 #[allow(unused)]
 #[derive(Debug, Deserialize)]
 pub struct DnsRecordResponse {
-    id: String,
+    pub id: String,
     content: String,
     name: String,
     proxied: bool,
     #[serde(rename = "type")]
-    _type: String,
+    _type: Option<String>,
     comment: Option<String>,
 }
 
@@ -90,56 +90,74 @@ impl CloudflareService {
             .send()
             .await
             .map_err(|err| {
-                tracing::log::error!("{:?}", err);
+                tracing::log::error!(
+                    "[CloudflareService.create_dns_record]: {:?}",
+                    err
+                );
                 Status::internal("")
             })?
             .json()
             .await
             .map_err(|err| {
-                tracing::log::error!("{:?}", err);
+                tracing::log::error!(
+                    "[CloudflareService.create_dns_record]: {:?}",
+                    err
+                );
                 Status::internal("")
             })
     }
 
     pub async fn list_dns_records(
         &self,
-        name: String,
+        name: Option<String>,
     ) -> Result<CloudflareResponses<DnsRecordResponse>, Status> {
-        self.client
-            .get(format!(
-                "{}/zones/{}/dns_records",
-                self.api_url, self.zone_id
-            ))
-            .query(&[("name", name)])
-            .send()
+        let mut req = self.client.get(format!(
+            "{}/zones/{}/dns_records",
+            self.api_url, self.zone_id
+        ));
+
+        if let Some(name) = name {
+            req = req.query(&[("name", name)]);
+        }
+
+        req.send()
             .await
             .map_err(|err| {
-                tracing::log::error!("{:?}", err);
+                tracing::log::error!(
+                    "[CloudflareService.list_dns_records]: {:?}",
+                    err
+                );
                 Status::internal("")
             })?
             .json()
             .await
             .map_err(|err| {
-                tracing::log::error!("{:?}", err);
+                tracing::log::error!(
+                    "[CloudflareService.list_dns_records]: {:?}",
+                    err
+                );
                 Status::internal("")
             })
     }
 
-    pub async fn delete_dns_record(&self, name: String) -> Result<(), Status> {
-        if let Some(record) = self.list_dns_records(name).await?.result.first()
-        {
-            self.client
-                .delete(format!(
-                    "{}/zones/{}/dns_records/{}",
-                    self.api_url, self.zone_id, record.id
-                ))
-                .send()
-                .await
-                .map_err(|err| {
-                    tracing::log::error!("{:?}", err);
-                    Status::internal("")
-                })?;
-        }
+    pub async fn delete_dns_record(
+        &self,
+        record_id: String,
+    ) -> Result<(), Status> {
+        self.client
+            .delete(format!(
+                "{}/zones/{}/dns_records/{}",
+                self.api_url, self.zone_id, record_id
+            ))
+            .send()
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[CloudflareService.delete_dns_record]: {:?}",
+                    err
+                );
+                Status::internal("")
+            })?;
 
         Ok(())
     }

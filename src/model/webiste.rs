@@ -1,10 +1,15 @@
 use chrono::{DateTime, Utc};
 use deadpool_postgres::tokio_postgres::Row;
 use deadpool_postgres::Pool;
-use sea_query::{Asterisk, Expr, Iden, PostgresQueryBuilder, Query};
+use sea_query::{
+    Alias, Asterisk, Expr, Iden, IntoColumnRef, PostgresQueryBuilder, Query,
+    SelectStatement,
+};
 use sea_query_postgres::PostgresBinder;
 
 use crate::db::{get_count_from_rows, DbError};
+
+use super::domain::{DomainAsRel, DomainAsRelVec, DomainIden};
 
 #[derive(Debug, Clone, Copy, Iden)]
 #[iden(rename = "websites")]
@@ -15,7 +20,6 @@ pub enum WebsiteIden {
     CreatedAt,
     UpdatedAt,
     Name,
-    Domain,
     ClientId,
     ZitadelAppId,
 }
@@ -27,18 +31,40 @@ pub struct Website {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub name: String,
-    pub domain: String,
     pub client_id: String,
     pub zitadel_app_id: String,
+    pub domains: Vec<DomainAsRel>,
 }
 
 impl Website {
+    const DOMAINS_ALIAS: &'static str = "domains";
+
+    fn get_domains_alias() -> Alias {
+        Alias::new(Self::DOMAINS_ALIAS)
+    }
+
+    fn select_with_domain() -> SelectStatement {
+        let mut query = Query::select();
+
+        query
+            .column((WebsiteIden::Table, Asterisk))
+            .expr_as(DomainAsRel::get_agg(), Self::get_domains_alias())
+            .from(WebsiteIden::Table)
+            .left_join(
+                DomainIden::Table,
+                Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
+                    .equals((DomainIden::Table, DomainIden::WebsiteId)),
+            )
+            .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
+
+        query
+    }
+
     pub async fn create(
         pool: &Pool,
         website_id: &String,
         user_id: &String,
         name: &String,
-        domain: &String,
         client_id: &String,
         zitadel_app_id: &String,
     ) -> Result<Self, DbError> {
@@ -50,7 +76,6 @@ impl Website {
                 WebsiteIden::WebsiteId,
                 WebsiteIden::UserId,
                 WebsiteIden::Name,
-                WebsiteIden::Domain,
                 WebsiteIden::ClientId,
                 WebsiteIden::ZitadelAppId,
             ])
@@ -58,7 +83,6 @@ impl Website {
                 website_id.into(),
                 user_id.into(),
                 name.into(),
-                domain.into(),
                 client_id.into(),
                 zitadel_app_id.into(),
             ])?
@@ -76,10 +100,11 @@ impl Website {
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
-        let (sql, values) = Query::select()
-            .column(Asterisk)
-            .from(WebsiteIden::Table)
-            .cond_where(Expr::col(WebsiteIden::WebsiteId).eq(website_id))
+        let (sql, values) = Self::select_with_domain()
+            .cond_where(
+                Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
+                    .eq(website_id),
+            )
             .build_postgres(PostgresQueryBuilder);
 
         let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
@@ -93,10 +118,10 @@ impl Website {
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
-        let (sql, values) = Query::select()
-            .column(Asterisk)
-            .from(WebsiteIden::Table)
-            .cond_where(Expr::col(WebsiteIden::Domain).eq(domain))
+        let (sql, values) = Self::select_with_domain()
+            .cond_where(
+                Expr::col((DomainIden::Table, DomainIden::Domain)).eq(domain),
+            )
             .build_postgres(PostgresQueryBuilder);
 
         let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
@@ -112,14 +137,16 @@ impl Website {
         let conn = pool.get().await?;
 
         let (sql, values) = {
-            let mut query = Query::select();
-            query
-                .column(Asterisk)
-                .from(WebsiteIden::Table)
-                .cond_where(Expr::col(WebsiteIden::Name).eq(name));
+            let mut query = Self::select_with_domain();
+            query.cond_where(
+                Expr::col((WebsiteIden::Table, WebsiteIden::Name)).eq(name),
+            );
 
             if let Some(user_id) = user_id {
-                query.cond_where(Expr::col(WebsiteIden::UserId).eq(user_id));
+                query.cond_where(
+                    Expr::col((WebsiteIden::Table, WebsiteIden::UserId))
+                        .eq(user_id),
+                );
             }
 
             query.build_postgres(PostgresQueryBuilder)
@@ -140,16 +167,18 @@ impl Website {
         let transaction = conn.transaction().await?;
 
         let ((sql, values), (count_sql, count_values)) = {
-            let mut query = Query::select().from(WebsiteIden::Table).to_owned();
+            let mut query = Self::select_with_domain();
 
             if let Some(user_id) = user_id {
-                query.cond_where(Expr::col(WebsiteIden::UserId).eq(user_id));
+                query.cond_where(
+                    Expr::col((WebsiteIden::Table, WebsiteIden::UserId))
+                        .eq(user_id),
+                );
             }
 
             (
                 query
                     .clone()
-                    .column(Asterisk)
                     .limit(limit)
                     .offset(offset)
                     .build_postgres(PostgresQueryBuilder),
@@ -220,16 +249,19 @@ impl Website {
 
 impl From<&Row> for Website {
     fn from(row: &Row) -> Self {
+        let domains: Option<DomainAsRelVec> =
+            row.try_get(Self::DOMAINS_ALIAS).ok();
+
         Self {
             website_id: row.get(WebsiteIden::WebsiteId.to_string().as_str()),
             user_id: row.get(WebsiteIden::UserId.to_string().as_str()),
             created_at: row.get(WebsiteIden::CreatedAt.to_string().as_str()),
             updated_at: row.get(WebsiteIden::UpdatedAt.to_string().as_str()),
             name: row.get(WebsiteIden::Name.to_string().as_str()),
-            domain: row.get(WebsiteIden::Domain.to_string().as_str()),
             client_id: row.get(WebsiteIden::ClientId.to_string().as_str()),
             zitadel_app_id: row
                 .get(WebsiteIden::ZitadelAppId.to_string().as_str()),
+            domains: domains.map(|d| d.0).unwrap_or_default(),
         }
     }
 }
