@@ -249,14 +249,14 @@ impl website_service_server::WebsiteService for WebsiteService {
                     self.cloudflare_service
                         .delete_dns_record(dns_record_id)
                         .await?;
-                    Domain::delete(
-                        &self.pool,
-                        &website_id,
-                        &user_id,
-                        &domain.domain,
-                    )
-                    .await?;
                 }
+                Domain::delete(
+                    &self.pool,
+                    &website_id,
+                    &user_id,
+                    &domain.domain,
+                )
+                .await?;
             }
 
             Website::delete(&self.pool, &website_id, &user_id).await?;
