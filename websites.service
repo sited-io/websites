@@ -1,0 +1,14 @@
+[Unit]
+Description=Peoplesmarkets websites service
+After=network.target
+
+[Service]
+User=root
+EnvironmentFile=/opt/services/websites/.env
+ExecStart=/opt/services/websites/websites
+ExecReload=/opt/services/websites/websites
+Type=simple
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
