@@ -14,8 +14,16 @@ pub struct WebsiteResponse {
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub client_id: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "7")]
-    pub domains: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "7")]
+    pub domains: ::prost::alloc::vec::Vec<Domain>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Domain {
+    #[prost(string, tag = "1")]
+    pub domain: ::prost::alloc::string::String,
+    #[prost(enumeration = "DomainStatus", tag = "2")]
+    pub status: i32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -81,6 +89,34 @@ pub struct UpdateWebsiteResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AddDomainToWebsiteRequest {
+    #[prost(string, tag = "1")]
+    pub website_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub domain: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AddDomainToWebsiteResponse {
+    #[prost(message, optional, tag = "1")]
+    pub website: ::core::option::Option<WebsiteResponse>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RemoveDomainFromWebsiteRequest {
+    #[prost(string, tag = "1")]
+    pub website_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub domain: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RemoveDomainFromWebsiteResponse {
+    #[prost(message, optional, tag = "1")]
+    pub website: ::core::option::Option<WebsiteResponse>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeleteWebsiteRequest {
     #[prost(string, tag = "1")]
     pub website_id: ::prost::alloc::string::String,
@@ -88,6 +124,38 @@ pub struct DeleteWebsiteRequest {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeleteWebsiteResponse {}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DomainStatus {
+    Unspecified = 0,
+    Internal = 1,
+    Pending = 2,
+    Active = 3,
+}
+impl DomainStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            DomainStatus::Unspecified => "DOMAIN_STATUS_UNSPECIFIED",
+            DomainStatus::Internal => "DOMAIN_STATUS_INTERNAL",
+            DomainStatus::Pending => "DOMAIN_STATUS_PENDING",
+            DomainStatus::Active => "DOMAIN_STATUS_ACTIVE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "DOMAIN_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "DOMAIN_STATUS_INTERNAL" => Some(Self::Internal),
+            "DOMAIN_STATUS_PENDING" => Some(Self::Pending),
+            "DOMAIN_STATUS_ACTIVE" => Some(Self::Active),
+            _ => None,
+        }
+    }
+}
 /// Generated server implementations.
 pub mod website_service_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
@@ -121,6 +189,20 @@ pub mod website_service_server {
             request: tonic::Request<super::UpdateWebsiteRequest>,
         ) -> std::result::Result<
             tonic::Response<super::UpdateWebsiteResponse>,
+            tonic::Status,
+        >;
+        async fn add_domain_to_website(
+            &self,
+            request: tonic::Request<super::AddDomainToWebsiteRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AddDomainToWebsiteResponse>,
+            tonic::Status,
+        >;
+        async fn remove_domain_from_website(
+            &self,
+            request: tonic::Request<super::RemoveDomainFromWebsiteRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::RemoveDomainFromWebsiteResponse>,
             tonic::Status,
         >;
         async fn delete_website(
@@ -379,6 +461,108 @@ pub mod website_service_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = UpdateWebsiteSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/sited_io.websites.v1.WebsiteService/AddDomainToWebsite" => {
+                    #[allow(non_camel_case_types)]
+                    struct AddDomainToWebsiteSvc<T: WebsiteService>(pub Arc<T>);
+                    impl<
+                        T: WebsiteService,
+                    > tonic::server::UnaryService<super::AddDomainToWebsiteRequest>
+                    for AddDomainToWebsiteSvc<T> {
+                        type Response = super::AddDomainToWebsiteResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AddDomainToWebsiteRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WebsiteService>::add_domain_to_website(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = AddDomainToWebsiteSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/sited_io.websites.v1.WebsiteService/RemoveDomainFromWebsite" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveDomainFromWebsiteSvc<T: WebsiteService>(pub Arc<T>);
+                    impl<
+                        T: WebsiteService,
+                    > tonic::server::UnaryService<super::RemoveDomainFromWebsiteRequest>
+                    for RemoveDomainFromWebsiteSvc<T> {
+                        type Response = super::RemoveDomainFromWebsiteResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::RemoveDomainFromWebsiteRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WebsiteService>::remove_domain_from_website(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = RemoveDomainFromWebsiteSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

@@ -2,8 +2,7 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::tokio_postgres::Row;
 use deadpool_postgres::Pool;
 use sea_query::{
-    Alias, Asterisk, Expr, Iden, IntoColumnRef, PostgresQueryBuilder, Query,
-    SelectStatement,
+    Alias, Asterisk, Expr, Iden, PostgresQueryBuilder, Query, SelectStatement,
 };
 use sea_query_postgres::PostgresBinder;
 
@@ -56,6 +55,16 @@ impl Website {
                     .equals((DomainIden::Table, DomainIden::WebsiteId)),
             )
             .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
+
+        query
+    }
+
+    fn select_count() -> SelectStatement {
+        let mut query = Query::select();
+
+        query
+            .expr(Expr::col(Asterisk).count())
+            .from(WebsiteIden::Table);
 
         query
     }
@@ -168,23 +177,22 @@ impl Website {
 
         let ((sql, values), (count_sql, count_values)) = {
             let mut query = Self::select_with_domain();
+            let mut count_query = Self::select_count();
 
             if let Some(user_id) = user_id {
-                query.cond_where(
+                let where_user_id =
                     Expr::col((WebsiteIden::Table, WebsiteIden::UserId))
-                        .eq(user_id),
-                );
+                        .eq(user_id);
+                query.cond_where(where_user_id.clone());
+                count_query.cond_where(where_user_id);
             }
 
             (
                 query
-                    .clone()
                     .limit(limit)
                     .offset(offset)
                     .build_postgres(PostgresQueryBuilder),
-                query
-                    .expr(Expr::col(Asterisk).count())
-                    .build_postgres(PostgresQueryBuilder),
+                count_query.build_postgres(PostgresQueryBuilder),
             )
         };
 

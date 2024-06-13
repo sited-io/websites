@@ -1,5 +1,5 @@
-mod webiste;
 mod domain;
+mod webiste;
 
-pub use domain::Domain;
+pub use domain::{Domain, DomainAsRel};
 pub use webiste::Website;

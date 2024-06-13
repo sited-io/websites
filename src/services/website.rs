@@ -5,14 +5,17 @@ use zitadel::api::zitadel::management::v1::AddOidcAppResponse;
 
 use crate::api::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
 use crate::api::sited_io::websites::v1::{
-    website_service_server, CreateWebsiteRequest, CreateWebsiteResponse,
-    DeleteWebsiteRequest, DeleteWebsiteResponse, GetWebsiteRequest,
-    GetWebsiteResponse, ListWebsitesRequest, ListWebsitesResponse,
-    UpdateWebsiteRequest, UpdateWebsiteResponse, WebsiteResponse,
+    website_service_server, AddDomainToWebsiteRequest,
+    AddDomainToWebsiteResponse, CreateWebsiteRequest, CreateWebsiteResponse,
+    DeleteWebsiteRequest, DeleteWebsiteResponse, Domain as DomainResponse,
+    DomainStatus, GetWebsiteRequest, GetWebsiteResponse, ListWebsitesRequest,
+    ListWebsitesResponse, RemoveDomainFromWebsiteRequest,
+    RemoveDomainFromWebsiteResponse, UpdateWebsiteRequest,
+    UpdateWebsiteResponse, WebsiteResponse,
 };
 use crate::auth::get_user_id;
 use crate::cloudflare::CloudflareService;
-use crate::model::{Domain, Website};
+use crate::model::{Domain, DomainAsRel, Website};
 use crate::zitadel::ZitadelService;
 use crate::{datetime_to_timestamp, i64_to_u32};
 
@@ -77,8 +80,19 @@ impl WebsiteService {
             created_at: datetime_to_timestamp(website.created_at),
             updated_at: datetime_to_timestamp(website.updated_at),
             name: website.name,
-            domains: website.domains.into_iter().map(|d| d.domain).collect(),
+            domains: website
+                .domains
+                .into_iter()
+                .map(|d| self.to_domain(d))
+                .collect(),
             client_id: website.client_id,
+        }
+    }
+
+    fn to_domain(&self, domain: DomainAsRel) -> DomainResponse {
+        DomainResponse {
+            domain: domain.domain,
+            status: DomainStatus::from_str_name(&domain.status).unwrap().into(),
         }
     }
 
@@ -130,11 +144,9 @@ impl website_service_server::WebsiteService for WebsiteService {
             client_id, app_id, ..
         } = res.into_inner();
 
-        let dns_record = self
-            .cloudflare_service
+        self.cloudflare_service
             .create_dns_record(domain.clone())
-            .await?
-            .result;
+            .await?;
 
         let created_website = Website::create(
             &self.pool,
@@ -151,7 +163,7 @@ impl website_service_server::WebsiteService for WebsiteService {
             &website_id,
             &user_id,
             &domain,
-            &Some(dns_record.id),
+            DomainStatus::Internal.as_str_name(),
         )
         .await?;
 
@@ -228,6 +240,101 @@ impl website_service_server::WebsiteService for WebsiteService {
         }))
     }
 
+    async fn add_domain_to_website(
+        &self,
+        request: Request<AddDomainToWebsiteRequest>,
+    ) -> Result<Response<AddDomainToWebsiteResponse>, Status> {
+        let user_id = get_user_id(&request.metadata(), &self.verifier).await?;
+
+        let AddDomainToWebsiteRequest { website_id, domain } =
+            request.into_inner();
+
+        if Website::get(&self.pool, &website_id)
+            .await?
+            .is_some_and(|w| w.user_id == user_id)
+        {
+            if Domain::get_by_domain_and_status(
+                &self.pool,
+                &domain,
+                DomainStatus::Active.as_str_name(),
+            )
+            .await?
+            .is_some()
+            {
+                return Err(Status::invalid_argument(
+                    "Domain is already in use",
+                ));
+            };
+
+            Domain::create(
+                &self.pool,
+                &website_id,
+                &user_id,
+                &domain,
+                DomainStatus::Pending.as_str_name(),
+            )
+            .await?;
+
+            let updated_website = Website::get(&self.pool, &website_id).await?;
+
+            Ok(Response::new(AddDomainToWebsiteResponse {
+                website: updated_website.map(|w| self.to_response(w)),
+            }))
+        } else {
+            Err(Status::invalid_argument(format!(
+                "Could not find website by website_id '{}'",
+                website_id
+            )))
+        }
+    }
+
+    async fn remove_domain_from_website(
+        &self,
+        request: Request<RemoveDomainFromWebsiteRequest>,
+    ) -> Result<Response<RemoveDomainFromWebsiteResponse>, Status> {
+        let user_id = get_user_id(&request.metadata(), &self.verifier).await?;
+
+        let RemoveDomainFromWebsiteRequest { website_id, domain } =
+            request.into_inner();
+
+        if let Some(found_domain) =
+            Domain::get_for_website(&self.pool, &domain, &website_id).await?
+        {
+            if found_domain.status != DomainStatus::Internal.as_str_name() {
+                let found_custom_hostnames = self
+                    .cloudflare_service
+                    .list_custom_hostnames(&domain)
+                    .await?;
+
+                for custom_hostname in found_custom_hostnames.result {
+                    self.cloudflare_service
+                        .delete_custom_hostname(custom_hostname.id)
+                        .await?;
+                }
+
+                Domain::delete(
+                    &self.pool,
+                    found_domain.domain_id,
+                    &website_id,
+                    &user_id,
+                )
+                .await?;
+
+                let updated_website =
+                    Website::get(&self.pool, &website_id).await?;
+
+                return Ok(Response::new(RemoveDomainFromWebsiteResponse {
+                    website: updated_website.map(|w| self.to_response(w)),
+                }));
+            }
+        }
+
+        Err(Status::invalid_argument(format!(
+            "Could not find domain '{}'",
+            domain
+        )))
+    }
+
     async fn delete_website(
         &self,
         request: Request<DeleteWebsiteRequest>,
@@ -245,19 +352,31 @@ impl website_service_server::WebsiteService for WebsiteService {
                 .await?;
 
             for domain in found_website.domains {
-                if let Some(dns_record_id) = domain.cloudflare_dns_record_id {
+                let found_records = self
+                    .cloudflare_service
+                    .list_dns_records(Some(domain.domain.clone()))
+                    .await?;
+                for record in found_records.result {
                     self.cloudflare_service
-                        .delete_dns_record(dns_record_id)
+                        .delete_dns_record(record.id)
                         .await?;
                 }
-                Domain::delete(
-                    &self.pool,
-                    &website_id,
-                    &user_id,
-                    &domain.domain,
-                )
-                .await?;
+
+                if domain.status == DomainStatus::Active.as_str_name() {
+                    let found_custom_hostnames = self
+                        .cloudflare_service
+                        .list_custom_hostnames(&domain.domain)
+                        .await?;
+                    for custom_hostname in found_custom_hostnames.result {
+                        self.cloudflare_service
+                            .delete_custom_hostname(custom_hostname.id)
+                            .await?;
+                    }
+                }
             }
+
+            Domain::delete_for_website(&self.pool, &website_id, &user_id)
+                .await?;
 
             Website::delete(&self.pool, &website_id, &user_id).await?;
         }

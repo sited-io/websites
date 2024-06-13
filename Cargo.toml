@@ -23,6 +23,7 @@ sea-query-postgres = { version = "0.4.0", features = [
 ] }
 serde = { version = "1.0.203", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros"] }
+tokio-cron-scheduler = "0.10.2"
 tonic = "0.11.0"
 tonic-health = "0.11.0"
 tonic-reflection = "0.11.0"

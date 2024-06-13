@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use http::header::AUTHORIZATION;
 use http::{HeaderMap, HeaderValue};
 use reqwest::Client;
@@ -14,15 +16,31 @@ struct CreateDnsRecordRequest {
     ttl: usize,
 }
 
+#[derive(Debug, Serialize)]
+struct CreateCustomHostnameRequest {
+    hostname: String,
+    ssl: CreateCustomHostnameSslRequest,
+}
+
+#[derive(Debug, Serialize)]
+struct CreateCustomHostnameSslRequest {
+    method: &'static str,
+    #[serde(rename = "type")]
+    _type: &'static str,
+    wildcard: bool,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CloudflareResponses<B> {
-    result: Vec<B>,
+    pub result: Vec<B>,
+    pub errors: Vec<HashMap<String, String>>,
 }
 
 #[allow(unused)]
 #[derive(Debug, Deserialize)]
 pub struct CloudflareResponse<B> {
     pub result: B,
+    pub errors: Vec<HashMap<String, String>>,
 }
 
 #[allow(unused)]
@@ -35,6 +53,13 @@ pub struct DnsRecordResponse {
     #[serde(rename = "type")]
     _type: Option<String>,
     comment: Option<String>,
+}
+
+#[allow(unused)]
+#[derive(Debug, Deserialize)]
+pub struct CustomHostnameResponse {
+    pub id: String,
+    pub hostname: String,
 }
 
 #[derive(Clone)]
@@ -158,6 +183,102 @@ impl CloudflareService {
                 );
                 Status::internal("")
             })?;
+
+        Ok(())
+    }
+
+    pub async fn create_custom_hostname(
+        &self,
+        hostname: String,
+    ) -> Result<CloudflareResponse<CustomHostnameResponse>, Status> {
+        let body = CreateCustomHostnameRequest {
+            hostname,
+            ssl: CreateCustomHostnameSslRequest {
+                method: "http",
+                _type: "dv",
+                wildcard: false,
+            },
+        };
+
+        self.client
+            .post(format!(
+                "{}/zones/{}/custom_hostnames",
+                self.api_url, self.zone_id
+            ))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[CloudflareService.create_custom_hostname]: {:?}",
+                    err
+                );
+                Status::internal("")
+            })?
+            .json()
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[CloudflareService.create_custom_hostname]: {:?}",
+                    err
+                );
+                Status::internal("")
+            })
+    }
+
+    pub async fn list_custom_hostnames(
+        &self,
+        hostname: &String,
+    ) -> Result<CloudflareResponses<CustomHostnameResponse>, Status> {
+        self.client
+            .get(format!(
+                "{}/zones/{}/custom_hostnames",
+                self.api_url, self.zone_id
+            ))
+            .query(&[("hostname", hostname)])
+            .send()
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[CloudflareService.list_custom_hostnames]: {:?}",
+                    err
+                );
+                Status::internal("")
+            })?
+            .json()
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[CloudflareService.list_custom_hostnames]: {:?}",
+                    err
+                );
+                Status::internal("")
+            })
+    }
+
+    pub async fn delete_custom_hostname(
+        &self,
+        custom_hostname_id: String,
+    ) -> Result<(), Status> {
+        let url = format!(
+            "{}/zones/{}/custom_hostnames/{}",
+            self.api_url, self.zone_id, custom_hostname_id
+        );
+
+        self.client
+            .delete(url)
+            .send()
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[CloudflareService.delete_custom_hostname]: {:?}",
+                    err
+                );
+                Status::internal("")
+            })?
+            .text()
+            .await
+            .unwrap();
 
         Ok(())
     }

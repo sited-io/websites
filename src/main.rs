@@ -6,6 +6,7 @@ use tower_http::trace::TraceLayer;
 
 use websites::api::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
 use websites::cloudflare::CloudflareService;
+use websites::custom_hostnames::run_custom_hostnames_check;
 use websites::db::{init_db_pool, migrate};
 use websites::logging::{LogOnFailure, LogOnRequest, LogOnResponse};
 use websites::zitadel::ZitadelService;
@@ -29,6 +30,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("DB_ROOT_CERT").ok(),
     )?;
     migrate(&db_pool).await?;
+
+    let cloudflare_service = CloudflareService::init(
+        get_env_var("CLOUDFLARE_API_URL"),
+        get_env_var("CLOUDFLARE_ZONE_ID"),
+        get_env_var("MAIN_DOMAIN"),
+        get_env_var("CLOUDFLARE_API_TOKEN"),
+    );
+
+    run_custom_hostnames_check(db_pool.clone(), cloudflare_service.clone())
+        .await?;
 
     let (mut health_reporter, health_service) =
         tonic_health::server::health_reporter();
@@ -56,12 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get_env_var("ZITADEL_PROJECT_ID"),
         )
         .await?,
-        CloudflareService::init(
-            get_env_var("CLOUDFLARE_API_URL"),
-            get_env_var("CLOUDFLARE_ZONE_ID"),
-            get_env_var("MAIN_DOMAIN"),
-            get_env_var("CLOUDFLARE_API_TOKEN"),
-        ),
+        cloudflare_service,
     );
 
     tracing::log::info!("gRPC+web server listening on {}", host);

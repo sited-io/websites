@@ -15,22 +15,24 @@ use crate::db::{get_type_from_oid, ArrayAgg, DbError};
 #[iden(rename = "domains")]
 pub enum DomainIden {
     Table,
+    DomainId,
     WebsiteId,
     UserId,
     CreatedAt,
     UpdatedAt,
     Domain,
-    CloudflareDnsRecordId,
+    Status,
 }
 
 #[derive(Debug, Clone)]
 pub struct Domain {
-    pub domain: String,
+    pub domain_id: i64,
     pub website_id: String,
     pub user_id: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub cloudflare_dns_record_id: Option<String>,
+    pub domain: String,
+    pub status: String,
 }
 
 impl Domain {
@@ -39,7 +41,7 @@ impl Domain {
         website_id: &String,
         user_id: &String,
         domain: &String,
-        cloudflare_dns_record_id: &Option<String>,
+        status: &'static str,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
 
@@ -49,13 +51,13 @@ impl Domain {
                 DomainIden::WebsiteId,
                 DomainIden::UserId,
                 DomainIden::Domain,
-                DomainIden::CloudflareDnsRecordId,
+                DomainIden::Status,
             ])
             .values([
                 website_id.into(),
                 user_id.into(),
                 domain.into(),
-                cloudflare_dns_record_id.to_owned().into(),
+                status.into(),
             ])?
             .returning_all()
             .build_postgres(PostgresQueryBuilder);
@@ -65,16 +67,58 @@ impl Domain {
         Ok(Self::from(row))
     }
 
-    pub async fn list_for_website(
+    pub async fn get_for_website(
         pool: &Pool,
+        domain: &String,
         website_id: &String,
+    ) -> Result<Option<Self>, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::select()
+            .column(Asterisk)
+            .from(DomainIden::Table)
+            .cond_where(all![
+                Expr::col(DomainIden::Domain).eq(domain),
+                Expr::col(DomainIden::WebsiteId).eq(website_id)
+            ])
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
+
+        Ok(row.map(Self::from))
+    }
+
+    pub async fn get_by_domain_and_status(
+        pool: &Pool,
+        domain: &String,
+        status: &'static str,
+    ) -> Result<Option<Self>, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::select()
+            .column(Asterisk)
+            .from(DomainIden::Table)
+            .cond_where(all![
+                Expr::col(DomainIden::Domain).eq(domain),
+                Expr::col(DomainIden::Status).eq(status)
+            ])
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
+
+        Ok(row.map(Self::from))
+    }
+
+    pub async fn list_by_status(
+        pool: &Pool,
+        status: &'static str,
     ) -> Result<Vec<Self>, DbError> {
         let conn = pool.get().await?;
 
         let (sql, values) = Query::select()
             .column(Asterisk)
             .from(DomainIden::Table)
-            .cond_where(Expr::col(DomainIden::WebsiteId).eq(website_id))
+            .cond_where(Expr::col(DomainIden::Status).eq(status))
             .build_postgres(PostgresQueryBuilder);
 
         let rows = conn.query(sql.as_str(), &values.as_params()).await?;
@@ -82,11 +126,35 @@ impl Domain {
         Ok(rows.iter().map(Self::from).collect())
     }
 
-    pub async fn delete(
+    pub async fn update(
+        pool: &Pool,
+        domain_id: i64,
+        website_id: &String,
+        user_id: &String,
+        status: &'static str,
+    ) -> Result<Self, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::update()
+            .table(DomainIden::Table)
+            .value(DomainIden::Status, status)
+            .cond_where(all![
+                Expr::col(DomainIden::DomainId).eq(domain_id),
+                Expr::col(DomainIden::WebsiteId).eq(website_id),
+                Expr::col(DomainIden::UserId).eq(user_id),
+            ])
+            .returning_all()
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_one(sql.as_str(), &values.as_params()).await?;
+
+        Ok(Self::from(row))
+    }
+
+    pub async fn delete_for_website(
         pool: &Pool,
         website_id: &String,
         user_id: &String,
-        domain: &String,
     ) -> Result<(), DbError> {
         let conn = pool.get().await?;
 
@@ -94,8 +162,29 @@ impl Domain {
             .from_table(DomainIden::Table)
             .cond_where(all![
                 Expr::col(DomainIden::WebsiteId).eq(website_id),
+                Expr::col(DomainIden::UserId).eq(user_id)
+            ])
+            .build_postgres(PostgresQueryBuilder);
+
+        conn.query(sql.as_str(), &values.as_params()).await?;
+
+        Ok(())
+    }
+
+    pub async fn delete(
+        pool: &Pool,
+        domain_id: i64,
+        website_id: &String,
+        user_id: &String,
+    ) -> Result<(), DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::delete()
+            .from_table(DomainIden::Table)
+            .cond_where(all![
+                Expr::col(DomainIden::DomainId).eq(domain_id),
+                Expr::col(DomainIden::WebsiteId).eq(website_id),
                 Expr::col(DomainIden::UserId).eq(user_id),
-                Expr::col(DomainIden::Domain).eq(domain),
             ])
             .build_postgres(PostgresQueryBuilder);
 
@@ -108,13 +197,13 @@ impl Domain {
 impl From<&Row> for Domain {
     fn from(row: &Row) -> Self {
         Self {
-            domain: row.get(DomainIden::Domain.to_string().as_str()),
+            domain_id: row.get(DomainIden::DomainId.to_string().as_str()),
             website_id: row.get(DomainIden::WebsiteId.to_string().as_str()),
             user_id: row.get(DomainIden::UserId.to_string().as_str()),
             created_at: row.get(DomainIden::CreatedAt.to_string().as_str()),
             updated_at: row.get(DomainIden::UpdatedAt.to_string().as_str()),
-            cloudflare_dns_record_id: row
-                .get(DomainIden::CloudflareDnsRecordId.to_string().as_str()),
+            domain: row.get(DomainIden::Domain.to_string().as_str()),
+            status: row.get(DomainIden::Status.to_string().as_str()),
         }
     }
 }
@@ -128,7 +217,7 @@ impl From<Row> for Domain {
 #[derive(Debug, Clone)]
 pub struct DomainAsRel {
     pub domain: String,
-    pub cloudflare_dns_record_id: Option<String>,
+    pub status: String,
 }
 
 impl DomainAsRel {
@@ -136,11 +225,7 @@ impl DomainAsRel {
         Func::cust(ArrayAgg)
             .args([Expr::tuple([
                 Expr::col((DomainIden::Table, DomainIden::Domain)).into(),
-                Expr::col((
-                    DomainIden::Table,
-                    DomainIden::CloudflareDnsRecordId,
-                ))
-                .into(),
+                Expr::col((DomainIden::Table, DomainIden::Status)).into(),
             ])
             .into()])
             .into()
@@ -163,14 +248,10 @@ impl<'a> FromSql<'a> for DomainAsRel {
         let domain: String = private::read_value(&ty, &mut raw)?;
 
         let oid = private::read_be_i32(&mut raw)?;
-        let ty = get_type_from_oid::<Option<String>>(oid)?;
-        let cloudflare_dns_record_id: Option<String> =
-            private::read_value(&ty, &mut raw)?;
+        let ty = get_type_from_oid::<String>(oid)?;
+        let status: String = private::read_value(&ty, &mut raw)?;
 
-        Ok(Self {
-            domain,
-            cloudflare_dns_record_id,
-        })
+        Ok(Self { domain, status })
     }
 }
 

@@ -111,6 +111,14 @@ impl From<DbError> for Status {
     }
 }
 
+impl std::fmt::Display for DbError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for DbError {}
+
 pub fn init_db_pool(
     host: String,
     port: u16,
