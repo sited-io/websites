@@ -25,6 +25,7 @@ pub struct WebsiteService {
     pool: Pool,
     verifier: RemoteJwksVerifier,
     main_domain: String,
+    fallback_domain: String,
     zitadel_service: ZitadelService,
     cloudflare_service: CloudflareService,
 }
@@ -44,6 +45,7 @@ impl WebsiteService {
         pool: Pool,
         verifier: RemoteJwksVerifier,
         main_domain: String,
+        fallback_domain: String,
         zitadel_service: ZitadelService,
         cloudflare_service: CloudflareService,
     ) -> WebsiteServiceServer<Self> {
@@ -51,6 +53,7 @@ impl WebsiteService {
             pool,
             verifier,
             main_domain,
+            fallback_domain,
             zitadel_service,
             cloudflare_service,
         })
@@ -125,7 +128,7 @@ impl website_service_server::WebsiteService for WebsiteService {
         } = res.into_inner();
 
         self.cloudflare_service
-            .create_dns_record(domain.clone())
+            .create_dns_record(domain.clone(), self.fallback_domain.clone())
             .await?;
 
         let created_website = Website::create(

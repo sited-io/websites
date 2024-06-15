@@ -89,7 +89,6 @@ const CLOUDFLARE_DNS_URL: &str = "https://cloudflare-dns.com/dns-query";
 pub struct CloudflareService {
     api_url: String,
     zone_id: String,
-    main_domain: String,
     client: Client,
 }
 
@@ -97,7 +96,6 @@ impl CloudflareService {
     pub fn init(
         api_url: String,
         zone_id: String,
-        main_domain: String,
         token: String,
     ) -> Self {
         let mut default_headers = HeaderMap::with_capacity(1);
@@ -112,7 +110,6 @@ impl CloudflareService {
         Self {
             api_url,
             zone_id,
-            main_domain,
             client,
         }
     }
@@ -120,10 +117,11 @@ impl CloudflareService {
     pub async fn create_dns_record(
         &self,
         name: String,
+        content: String,
     ) -> Result<CloudflareResponse<DnsRecordResponse>, Status> {
         let body = CreateDnsRecordRequest {
             name,
-            content: self.main_domain.clone(),
+            content,
             proxied: true,
             _type: "CNAME".to_string(),
             ttl: 1,
