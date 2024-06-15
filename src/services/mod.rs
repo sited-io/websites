@@ -1,4 +1,6 @@
 mod website;
+mod domain;
+mod customization;
 
 use tonic::Status;
 
@@ -7,6 +9,8 @@ use crate::api::sited_io::pagination::v1::{
 };
 
 pub use website::WebsiteService;
+pub use domain::DomainService;
+pub use customization::CustomizationService;
 
 /// Returns limit and offset from PaginationRequest
 fn get_limit_offset_from_pagination(

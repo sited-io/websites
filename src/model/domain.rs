@@ -5,11 +5,14 @@ use deadpool_postgres::Pool;
 use fallible_iterator::FallibleIterator;
 use postgres_protocol::types;
 use sea_query::{
-    all, Asterisk, Expr, Func, Iden, PostgresQueryBuilder, Query, SimpleExpr,
+    all, Alias, Asterisk, Expr, Func, Iden, PostgresQueryBuilder, Query,
+    SelectStatement, SimpleExpr,
 };
 use sea_query_postgres::PostgresBinder;
 
 use crate::db::{get_type_from_oid, ArrayAgg, DbError};
+
+use super::webiste::WebsiteIden;
 
 #[derive(Debug, Clone, Copy, Iden)]
 #[iden(rename = "domains")]
@@ -65,6 +68,27 @@ impl Domain {
         let row = conn.query_one(sql.as_str(), &values.as_params()).await?;
 
         Ok(Self::from(row))
+    }
+
+    pub async fn get_for_user(
+        pool: &Pool,
+        domain_id: i64,
+        user_id: &String,
+    ) -> Result<Option<Self>, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::select()
+            .column(Asterisk)
+            .from(DomainIden::Table)
+            .cond_where(all![
+                Expr::col(DomainIden::DomainId).eq(domain_id),
+                Expr::col(DomainIden::UserId).eq(user_id)
+            ])
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
+
+        Ok(row.map(Self::from))
     }
 
     pub async fn get_for_website(
@@ -216,14 +240,39 @@ impl From<Row> for Domain {
 
 #[derive(Debug, Clone)]
 pub struct DomainAsRel {
+    pub domain_id: i64,
     pub domain: String,
     pub status: String,
 }
 
 impl DomainAsRel {
+    pub fn add_join(query: &mut SelectStatement, alias: Alias) {
+        query
+            .expr_as(
+                Func::cust(ArrayAgg)
+                    .args([Expr::tuple([
+                        Expr::col((DomainIden::Table, DomainIden::DomainId))
+                            .into(),
+                        Expr::col((DomainIden::Table, DomainIden::Domain))
+                            .into(),
+                        Expr::col((DomainIden::Table, DomainIden::Status))
+                            .into(),
+                    ])
+                    .into()]),
+                alias,
+            )
+            .left_join(
+                DomainIden::Table,
+                Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
+                    .equals((DomainIden::Table, DomainIden::WebsiteId)),
+            )
+            .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
+    }
+
     pub fn get_agg() -> SimpleExpr {
         Func::cust(ArrayAgg)
             .args([Expr::tuple([
+                Expr::col((DomainIden::Table, DomainIden::DomainId)).into(),
                 Expr::col((DomainIden::Table, DomainIden::Domain)).into(),
                 Expr::col((DomainIden::Table, DomainIden::Status)).into(),
             ])
@@ -233,7 +282,7 @@ impl DomainAsRel {
 }
 
 impl<'a> FromSql<'a> for DomainAsRel {
-    fn accepts(ty: &deadpool_postgres::tokio_postgres::types::Type) -> bool {
+    fn accepts(ty: &Type) -> bool {
         matches!(*ty, Type::RECORD)
     }
 
@@ -244,6 +293,10 @@ impl<'a> FromSql<'a> for DomainAsRel {
         private::read_be_i32(&mut raw)?;
 
         let oid = private::read_be_i32(&mut raw)?;
+        let ty = get_type_from_oid::<i64>(oid)?;
+        let domain_id: i64 = private::read_value(&ty, &mut raw)?;
+
+        let oid = private::read_be_i32(&mut raw)?;
         let ty = get_type_from_oid::<String>(oid)?;
         let domain: String = private::read_value(&ty, &mut raw)?;
 
@@ -251,7 +304,21 @@ impl<'a> FromSql<'a> for DomainAsRel {
         let ty = get_type_from_oid::<String>(oid)?;
         let status: String = private::read_value(&ty, &mut raw)?;
 
-        Ok(Self { domain, status })
+        Ok(Self {
+            domain_id,
+            domain,
+            status,
+        })
+    }
+}
+
+impl From<Domain> for DomainAsRel {
+    fn from(domain: Domain) -> Self {
+        Self {
+            domain_id: domain.domain_id,
+            domain: domain.domain,
+            status: domain.status,
+        }
     }
 }
 

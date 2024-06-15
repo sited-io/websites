@@ -6,11 +6,13 @@ use tower_http::trace::TraceLayer;
 
 use websites::api::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
 use websites::cloudflare::CloudflareService;
-use websites::custom_hostnames::run_custom_hostnames_check;
 use websites::db::{init_db_pool, migrate};
 use websites::logging::{LogOnFailure, LogOnRequest, LogOnResponse};
 use websites::zitadel::ZitadelService;
-use websites::{get_env_var, init_jwks_verifier, WebsiteService};
+use websites::{
+    get_env_var, init_jwks_verifier, CustomizationService, DomainService,
+    WebsiteService,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,9 +40,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         get_env_var("CLOUDFLARE_API_TOKEN"),
     );
 
-    run_custom_hostnames_check(db_pool.clone(), cloudflare_service.clone())
-        .await?;
-
     let (mut health_reporter, health_service) =
         tonic_health::server::health_reporter();
     health_reporter
@@ -58,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
 
     let website_service = WebsiteService::build(
-        db_pool,
+        db_pool.clone(),
         init_jwks_verifier(&jwks_host, &jwks_url)?,
         get_env_var("MAIN_DOMAIN"),
         ZitadelService::init(
@@ -67,6 +66,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get_env_var("ZITADEL_PROJECT_ID"),
         )
         .await?,
+        cloudflare_service.clone(),
+    );
+
+    let customization_service = CustomizationService::build(
+        db_pool.clone(),
+        init_jwks_verifier(&jwks_host, &jwks_url)?,
+    );
+
+    let domain_service = DomainService::build(
+        db_pool,
+        init_jwks_verifier(&jwks_host, &jwks_url)?,
+        get_env_var("FALLBACK_DOMAIN"),
         cloudflare_service,
     );
 
@@ -98,6 +109,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(tonic_web::enable(reflection_service))
         .add_service(tonic_web::enable(health_service))
         .add_service(tonic_web::enable(website_service))
+        .add_service(tonic_web::enable(customization_service))
+        .add_service(tonic_web::enable(domain_service))
         .serve(host.parse().unwrap())
         .await?;
 

@@ -9,6 +9,7 @@ use sea_query_postgres::PostgresBinder;
 use crate::db::{get_count_from_rows, DbError};
 
 use super::domain::{DomainAsRel, DomainAsRelVec, DomainIden};
+use super::CustomizationAsRel;
 
 #[derive(Debug, Clone, Copy, Iden)]
 #[iden(rename = "websites")]
@@ -32,6 +33,7 @@ pub struct Website {
     pub name: String,
     pub client_id: String,
     pub zitadel_app_id: String,
+    pub customization: Option<CustomizationAsRel>,
     pub domains: Vec<DomainAsRel>,
 }
 
@@ -42,19 +44,15 @@ impl Website {
         Alias::new(Self::DOMAINS_ALIAS)
     }
 
-    fn select_with_domain() -> SelectStatement {
+    fn select_with_relations() -> SelectStatement {
         let mut query = Query::select();
 
         query
             .column((WebsiteIden::Table, Asterisk))
-            .expr_as(DomainAsRel::get_agg(), Self::get_domains_alias())
-            .from(WebsiteIden::Table)
-            .left_join(
-                DomainIden::Table,
-                Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
-                    .equals((DomainIden::Table, DomainIden::WebsiteId)),
-            )
-            .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
+            .from(WebsiteIden::Table);
+
+        CustomizationAsRel::add_join(&mut query);
+        DomainAsRel::add_join(&mut query, Self::get_domains_alias());
 
         query
     }
@@ -109,7 +107,7 @@ impl Website {
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
-        let (sql, values) = Self::select_with_domain()
+        let (sql, values) = Self::select_with_relations()
             .cond_where(
                 Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
                     .eq(website_id),
@@ -127,7 +125,7 @@ impl Website {
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
-        let (sql, values) = Self::select_with_domain()
+        let (sql, values) = Self::select_with_relations()
             .cond_where(
                 Expr::col((DomainIden::Table, DomainIden::Domain)).eq(domain),
             )
@@ -146,7 +144,7 @@ impl Website {
         let conn = pool.get().await?;
 
         let (sql, values) = {
-            let mut query = Self::select_with_domain();
+            let mut query = Self::select_with_relations();
             query.cond_where(
                 Expr::col((WebsiteIden::Table, WebsiteIden::Name)).eq(name),
             );
@@ -176,7 +174,7 @@ impl Website {
         let transaction = conn.transaction().await?;
 
         let ((sql, values), (count_sql, count_values)) = {
-            let mut query = Self::select_with_domain();
+            let mut query = Self::select_with_relations();
             let mut count_query = Self::select_count();
 
             if let Some(user_id) = user_id {
@@ -257,8 +255,12 @@ impl Website {
 
 impl From<&Row> for Website {
     fn from(row: &Row) -> Self {
-        let domains: Option<DomainAsRelVec> =
-            row.try_get(Self::DOMAINS_ALIAS).ok();
+        let customization = CustomizationAsRel::try_from(row).ok();
+        let domains = row
+            .try_get::<&str, DomainAsRelVec>(Self::DOMAINS_ALIAS)
+            .ok()
+            .map(|d| d.0)
+            .unwrap_or_default();
 
         Self {
             website_id: row.get(WebsiteIden::WebsiteId.to_string().as_str()),
@@ -269,7 +271,8 @@ impl From<&Row> for Website {
             client_id: row.get(WebsiteIden::ClientId.to_string().as_str()),
             zitadel_app_id: row
                 .get(WebsiteIden::ZitadelAppId.to_string().as_str()),
-            domains: domains.map(|d| d.0).unwrap_or_default(),
+            customization,
+            domains,
         }
     }
 }

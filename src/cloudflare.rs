@@ -55,12 +55,35 @@ pub struct DnsRecordResponse {
     comment: Option<String>,
 }
 
-#[allow(unused)]
 #[derive(Debug, Deserialize)]
 pub struct CustomHostnameResponse {
     pub id: String,
     pub hostname: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct DnsLookupResponse {
+    #[serde(rename = "Status")]
+    pub status: usize,
+    #[serde(rename = "Answer")]
+    pub answer: Option<Vec<DnsLookupResponseAnswer>>,
+    #[serde(rename = "Authority")]
+    pub authority: Option<Vec<DnsLookupResponseAnswer>>,
+    #[serde(rename = "Additional")]
+    pub additional: Option<Vec<DnsLookupResponseAnswer>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DnsLookupResponseAnswer {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub _type: usize,
+    #[serde(rename = "TTL")]
+    pub ttl: usize,
+    pub data: String,
+}
+
+const CLOUDFLARE_DNS_URL: &str = "https://cloudflare-dns.com/dns-query";
 
 #[derive(Clone)]
 pub struct CloudflareService {
@@ -281,5 +304,33 @@ impl CloudflareService {
             .unwrap();
 
         Ok(())
+    }
+
+    pub async fn dns_lookup(
+        &self,
+        domain: &String,
+    ) -> Result<DnsLookupResponse, Status> {
+        self.client
+            .get(CLOUDFLARE_DNS_URL)
+            .query(&[("name", domain)])
+            .header("accept", "application/dns-json")
+            .send()
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[CloudflareService.dns_lookup]: {:?}",
+                    err
+                );
+                Status::internal("")
+            })?
+            .json()
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[CloudflareService.dns_lookup]: {:?}",
+                    err
+                );
+                Status::internal("")
+            })
     }
 }

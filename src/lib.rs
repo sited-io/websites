@@ -1,7 +1,6 @@
 pub mod api;
 mod auth;
 pub mod cloudflare;
-pub mod custom_hostnames;
 pub mod db;
 pub mod logging;
 mod model;

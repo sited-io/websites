@@ -5,19 +5,19 @@ use zitadel::api::zitadel::management::v1::AddOidcAppResponse;
 
 use crate::api::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
 use crate::api::sited_io::websites::v1::{
-    website_service_server, AddDomainToWebsiteRequest,
-    AddDomainToWebsiteResponse, CreateWebsiteRequest, CreateWebsiteResponse,
-    DeleteWebsiteRequest, DeleteWebsiteResponse, Domain as DomainResponse,
-    DomainStatus, GetWebsiteRequest, GetWebsiteResponse, ListWebsitesRequest,
-    ListWebsitesResponse, RemoveDomainFromWebsiteRequest,
-    RemoveDomainFromWebsiteResponse, UpdateWebsiteRequest,
-    UpdateWebsiteResponse, WebsiteResponse,
+    website_service_server, CreateWebsiteRequest, CreateWebsiteResponse,
+    DeleteWebsiteRequest, DeleteWebsiteResponse, DomainStatus,
+    GetWebsiteRequest, GetWebsiteResponse, ListWebsitesRequest,
+    ListWebsitesResponse, UpdateWebsiteRequest, UpdateWebsiteResponse,
+    WebsiteResponse,
 };
 use crate::auth::get_user_id;
 use crate::cloudflare::CloudflareService;
-use crate::model::{Domain, DomainAsRel, Website};
+use crate::model::{Customization, Domain, Website};
 use crate::zitadel::ZitadelService;
-use crate::{datetime_to_timestamp, i64_to_u32};
+use crate::{
+    datetime_to_timestamp, i64_to_u32, CustomizationService, DomainService,
+};
 
 use super::get_limit_offset_from_pagination;
 
@@ -40,22 +40,6 @@ const DOMAIN_ALPHABET: [char; 36] = [
 ];
 
 impl WebsiteService {
-    fn new(
-        pool: Pool,
-        verifier: RemoteJwksVerifier,
-        main_domain: String,
-        zitadel_service: ZitadelService,
-        cloudflare_service: CloudflareService,
-    ) -> Self {
-        Self {
-            pool,
-            verifier,
-            main_domain,
-            zitadel_service,
-            cloudflare_service,
-        }
-    }
-
     pub fn build(
         pool: Pool,
         verifier: RemoteJwksVerifier,
@@ -63,14 +47,13 @@ impl WebsiteService {
         zitadel_service: ZitadelService,
         cloudflare_service: CloudflareService,
     ) -> WebsiteServiceServer<Self> {
-        let service = Self::new(
+        WebsiteServiceServer::new(Self {
             pool,
             verifier,
             main_domain,
             zitadel_service,
             cloudflare_service,
-        );
-        WebsiteServiceServer::new(service)
+        })
     }
 
     fn to_response(&self, website: Website) -> WebsiteResponse {
@@ -80,19 +63,15 @@ impl WebsiteService {
             created_at: datetime_to_timestamp(website.created_at),
             updated_at: datetime_to_timestamp(website.updated_at),
             name: website.name,
+            client_id: website.client_id,
+            customization: website
+                .customization
+                .map(CustomizationService::to_response),
             domains: website
                 .domains
                 .into_iter()
-                .map(|d| self.to_domain(d))
+                .map(DomainService::to_response)
                 .collect(),
-            client_id: website.client_id,
-        }
-    }
-
-    fn to_domain(&self, domain: DomainAsRel) -> DomainResponse {
-        DomainResponse {
-            domain: domain.domain,
-            status: DomainStatus::from_str_name(&domain.status).unwrap().into(),
         }
     }
 
@@ -119,8 +98,9 @@ impl website_service_server::WebsiteService for WebsiteService {
             return Err(Status::invalid_argument("name is too short"));
         }
 
-        if let Some(_) =
-            Website::get_by_name(&self.pool, &name, Some(&user_id)).await?
+        if Website::get_by_name(&self.pool, &name, Some(&user_id))
+            .await?
+            .is_some()
         {
             return Err(Status::invalid_argument("duplicate name"));
         }
@@ -157,6 +137,8 @@ impl website_service_server::WebsiteService for WebsiteService {
             &app_id,
         )
         .await?;
+
+        Customization::create(&self.pool, &website_id, &user_id).await?;
 
         Domain::create(
             &self.pool,
@@ -228,7 +210,7 @@ impl website_service_server::WebsiteService for WebsiteService {
         &self,
         request: Request<UpdateWebsiteRequest>,
     ) -> Result<Response<UpdateWebsiteResponse>, Status> {
-        let user_id = get_user_id(&request.metadata(), &self.verifier).await?;
+        let user_id = get_user_id(request.metadata(), &self.verifier).await?;
 
         let UpdateWebsiteRequest { website_id, name } = request.into_inner();
 
@@ -238,101 +220,6 @@ impl website_service_server::WebsiteService for WebsiteService {
         Ok(Response::new(UpdateWebsiteResponse {
             website: Some(self.to_response(updated_website)),
         }))
-    }
-
-    async fn add_domain_to_website(
-        &self,
-        request: Request<AddDomainToWebsiteRequest>,
-    ) -> Result<Response<AddDomainToWebsiteResponse>, Status> {
-        let user_id = get_user_id(&request.metadata(), &self.verifier).await?;
-
-        let AddDomainToWebsiteRequest { website_id, domain } =
-            request.into_inner();
-
-        if Website::get(&self.pool, &website_id)
-            .await?
-            .is_some_and(|w| w.user_id == user_id)
-        {
-            if Domain::get_by_domain_and_status(
-                &self.pool,
-                &domain,
-                DomainStatus::Active.as_str_name(),
-            )
-            .await?
-            .is_some()
-            {
-                return Err(Status::invalid_argument(
-                    "Domain is already in use",
-                ));
-            };
-
-            Domain::create(
-                &self.pool,
-                &website_id,
-                &user_id,
-                &domain,
-                DomainStatus::Pending.as_str_name(),
-            )
-            .await?;
-
-            let updated_website = Website::get(&self.pool, &website_id).await?;
-
-            Ok(Response::new(AddDomainToWebsiteResponse {
-                website: updated_website.map(|w| self.to_response(w)),
-            }))
-        } else {
-            Err(Status::invalid_argument(format!(
-                "Could not find website by website_id '{}'",
-                website_id
-            )))
-        }
-    }
-
-    async fn remove_domain_from_website(
-        &self,
-        request: Request<RemoveDomainFromWebsiteRequest>,
-    ) -> Result<Response<RemoveDomainFromWebsiteResponse>, Status> {
-        let user_id = get_user_id(&request.metadata(), &self.verifier).await?;
-
-        let RemoveDomainFromWebsiteRequest { website_id, domain } =
-            request.into_inner();
-
-        if let Some(found_domain) =
-            Domain::get_for_website(&self.pool, &domain, &website_id).await?
-        {
-            if found_domain.status != DomainStatus::Internal.as_str_name() {
-                let found_custom_hostnames = self
-                    .cloudflare_service
-                    .list_custom_hostnames(&domain)
-                    .await?;
-
-                for custom_hostname in found_custom_hostnames.result {
-                    self.cloudflare_service
-                        .delete_custom_hostname(custom_hostname.id)
-                        .await?;
-                }
-
-                Domain::delete(
-                    &self.pool,
-                    found_domain.domain_id,
-                    &website_id,
-                    &user_id,
-                )
-                .await?;
-
-                let updated_website =
-                    Website::get(&self.pool, &website_id).await?;
-
-                return Ok(Response::new(RemoveDomainFromWebsiteResponse {
-                    website: updated_website.map(|w| self.to_response(w)),
-                }));
-            }
-        }
-
-        Err(Status::invalid_argument(format!(
-            "Could not find domain '{}'",
-            domain
-        )))
     }
 
     async fn delete_website(
@@ -374,6 +261,8 @@ impl website_service_server::WebsiteService for WebsiteService {
                     }
                 }
             }
+
+            Customization::delete(&self.pool, &website_id, &user_id).await?;
 
             Domain::delete_for_website(&self.pool, &website_id, &user_id)
                 .await?;
