@@ -17,6 +17,7 @@ use crate::model::{Customization, Domain, Website};
 use crate::zitadel::ZitadelService;
 use crate::{
     datetime_to_timestamp, i64_to_u32, CustomizationService, DomainService,
+    PageService,
 };
 
 use super::get_limit_offset_from_pagination;
@@ -74,6 +75,11 @@ impl WebsiteService {
                 .domains
                 .into_iter()
                 .map(DomainService::to_response)
+                .collect(),
+            pages: website
+                .pages
+                .into_iter()
+                .map(PageService::to_response)
                 .collect(),
         }
     }

@@ -6,7 +6,7 @@ use fallible_iterator::FallibleIterator;
 use postgres_protocol::types;
 use sea_query::{
     all, Alias, Asterisk, Expr, Func, Iden, PostgresQueryBuilder, Query,
-    SelectStatement, SimpleExpr,
+    SelectStatement,
 };
 use sea_query_postgres::PostgresBinder;
 
@@ -249,16 +249,12 @@ impl DomainAsRel {
     pub fn add_join(query: &mut SelectStatement, alias: Alias) {
         query
             .expr_as(
-                Func::cust(ArrayAgg)
-                    .args([Expr::tuple([
-                        Expr::col((DomainIden::Table, DomainIden::DomainId))
-                            .into(),
-                        Expr::col((DomainIden::Table, DomainIden::Domain))
-                            .into(),
-                        Expr::col((DomainIden::Table, DomainIden::Status))
-                            .into(),
-                    ])
-                    .into()]),
+                Func::cust(ArrayAgg).args([Expr::tuple([
+                    Expr::col((DomainIden::Table, DomainIden::DomainId)).into(),
+                    Expr::col((DomainIden::Table, DomainIden::Domain)).into(),
+                    Expr::col((DomainIden::Table, DomainIden::Status)).into(),
+                ])
+                .into()]),
                 alias,
             )
             .left_join(
@@ -267,17 +263,6 @@ impl DomainAsRel {
                     .equals((DomainIden::Table, DomainIden::WebsiteId)),
             )
             .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
-    }
-
-    pub fn get_agg() -> SimpleExpr {
-        Func::cust(ArrayAgg)
-            .args([Expr::tuple([
-                Expr::col((DomainIden::Table, DomainIden::DomainId)).into(),
-                Expr::col((DomainIden::Table, DomainIden::Domain)).into(),
-                Expr::col((DomainIden::Table, DomainIden::Status)).into(),
-            ])
-            .into()])
-            .into()
     }
 }
 

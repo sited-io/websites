@@ -2,14 +2,16 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::tokio_postgres::Row;
 use deadpool_postgres::Pool;
 use sea_query::{
-    Alias, Asterisk, Expr, Iden, PostgresQueryBuilder, Query, SelectStatement,
+    all, Alias, Asterisk, Expr, Iden, PostgresQueryBuilder, Query,
+    SelectStatement,
 };
 use sea_query_postgres::PostgresBinder;
 
 use crate::db::{get_count_from_rows, DbError};
 
 use super::domain::{DomainAsRel, DomainAsRelVec, DomainIden};
-use super::CustomizationAsRel;
+use super::page::PageAsRelVec;
+use super::{CustomizationAsRel, PageAsRel};
 
 #[derive(Debug, Clone, Copy, Iden)]
 #[iden(rename = "websites")]
@@ -35,13 +37,19 @@ pub struct Website {
     pub zitadel_app_id: String,
     pub customization: Option<CustomizationAsRel>,
     pub domains: Vec<DomainAsRel>,
+    pub pages: Vec<PageAsRel>,
 }
 
 impl Website {
     const DOMAINS_ALIAS: &'static str = "domains";
+    const PAGES_ALIAS: &'static str = "pages";
 
     fn get_domains_alias() -> Alias {
         Alias::new(Self::DOMAINS_ALIAS)
+    }
+
+    fn get_pages_alias() -> Alias {
+        Alias::new(Self::PAGES_ALIAS)
     }
 
     fn select_with_relations() -> SelectStatement {
@@ -53,6 +61,7 @@ impl Website {
 
         CustomizationAsRel::add_join(&mut query);
         DomainAsRel::add_join(&mut query, Self::get_domains_alias());
+        PageAsRel::add_join(&mut query, Self::get_pages_alias());
 
         query
     }
@@ -112,6 +121,27 @@ impl Website {
                 Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
                     .eq(website_id),
             )
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
+
+        Ok(row.map(Self::from))
+    }
+
+    pub async fn get_for_user(
+        pool: &Pool,
+        website_id: &String,
+        user_id: &String,
+    ) -> Result<Option<Self>, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Self::select_with_relations()
+            .cond_where(all![
+                Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
+                    .eq(website_id),
+                Expr::col((WebsiteIden::Table, WebsiteIden::UserId))
+                    .eq(user_id)
+            ])
             .build_postgres(PostgresQueryBuilder);
 
         let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
@@ -222,8 +252,10 @@ impl Website {
             }
 
             query
-                .and_where(Expr::col(WebsiteIden::WebsiteId).eq(website_id))
-                .and_where(Expr::col(WebsiteIden::UserId).eq(user_id))
+                .cond_where(all![
+                    Expr::col(WebsiteIden::WebsiteId).eq(website_id),
+                    Expr::col(WebsiteIden::UserId).eq(user_id)
+                ])
                 .returning_all()
                 .build_postgres(PostgresQueryBuilder)
         };
@@ -261,6 +293,11 @@ impl From<&Row> for Website {
             .ok()
             .map(|d| d.0)
             .unwrap_or_default();
+        let pages = row
+            .try_get::<&str, PageAsRelVec>(Self::PAGES_ALIAS)
+            .ok()
+            .map(|p| p.0)
+            .unwrap_or_default();
 
         Self {
             website_id: row.get(WebsiteIden::WebsiteId.to_string().as_str()),
@@ -273,6 +310,7 @@ impl From<&Row> for Website {
                 .get(WebsiteIden::ZitadelAppId.to_string().as_str()),
             customization,
             domains,
+            pages,
         }
     }
 }

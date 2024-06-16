@@ -8,6 +8,8 @@ if [[ -z "$1" ]]; then
   cargo watch --quiet --exec 'run --release'
 elif [[ "once" == "$1" ]]; then
   cargo run --release
+elif [[ "build" == "$1" ]]; then
+  cargo build --release
 elif [[ "deploy" == "$1" ]]; then
   if [[ "dev" == "$2" ]]; then
     DEPLOYMENT_HOST="dev-single.peoplesmarkets.com"
