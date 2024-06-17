@@ -4,10 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aws-config = { version = "1.5.1", default-features = false, features = [
+  "rt-tokio",
+  "behavior-version-latest",
+] }
+aws-credential-types = { version = "1.2.0", default-features = false, features = [
+  "hardcoded-credentials",
+] }
+aws-sdk-s3 = { version = "1.36.0", default-features = false, features = [
+  "rt-tokio",
+  "rustls",
+] }
 chrono = "0.4.38"
 deadpool-postgres = "0.14.0"
 fallible-iterator = "0.2.0"
 http = "0.2"
+image = { version = "0.25.1", default-features = false, features = ["jpeg", "png", "webp"] }
+infer = { version = "0.16.0", default-features = false }
 jwtk = "0.3.0"
 nanoid = "0.4.0"
 openssl = { version = "0.10.64", features = ["vendored"] }
@@ -32,7 +45,12 @@ tower-http = { version = "0.4.4", features = ["trace", "cors"] }
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = { version = "0.3.18", features = ["tracing-log"] }
 uuid = { version = "1.8.0", features = ["v4"] }
-zitadel = { version = "4.3.5", features = ["api", "interceptors", "credentials"] }
+webp = { version = "0.3.0", default-features = false, features = ["img"] }
+zitadel = { version = "4.3.5", features = [
+  "api",
+  "interceptors",
+  "credentials",
+] }
 
 [build-dependencies]
 tonic-build = "0.11.0"

@@ -93,11 +93,7 @@ pub struct CloudflareService {
 }
 
 impl CloudflareService {
-    pub fn init(
-        api_url: String,
-        zone_id: String,
-        token: String,
-    ) -> Self {
+    pub fn init(api_url: String, zone_id: String, token: String) -> Self {
         let mut default_headers = HeaderMap::with_capacity(1);
         default_headers.insert(
             AUTHORIZATION,

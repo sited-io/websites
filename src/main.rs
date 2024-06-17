@@ -7,6 +7,7 @@ use tower_http::trace::TraceLayer;
 use websites::api::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
 use websites::cloudflare::CloudflareService;
 use websites::db::{init_db_pool, migrate};
+use websites::images::ImageService;
 use websites::logging::{LogOnFailure, LogOnRequest, LogOnResponse};
 use websites::zitadel::ZitadelService;
 use websites::{
@@ -39,6 +40,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         get_env_var("CLOUDFLARE_API_TOKEN"),
     );
 
+    // initialize s3 bucket
+    let image_service = ImageService::new(
+        get_env_var("BUCKET_NAME"),
+        get_env_var("BUCKET_ENDPOINT"),
+        get_env_var("BUCKET_ACCESS_KEY_ID"),
+        get_env_var("BUCKET_SECRET_ACCESS_KEY"),
+        get_env_var("BUCKET_URL"),
+        get_env_var("IMAGE_MAX_SIZE").parse().unwrap(),
+    )
+    .await;
+
     let (mut health_reporter, health_service) =
         tonic_health::server::health_reporter();
     health_reporter
@@ -67,11 +79,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?,
         cloudflare_service.clone(),
+        image_service.clone(),
     );
 
     let customization_service = CustomizationService::build(
         db_pool.clone(),
         init_jwks_verifier(&jwks_host, &jwks_url)?,
+        image_service,
     );
 
     let domain_service = DomainService::build(

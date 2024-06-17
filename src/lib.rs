@@ -2,6 +2,7 @@ pub mod api;
 mod auth;
 pub mod cloudflare;
 pub mod db;
+pub mod images;
 pub mod logging;
 mod model;
 mod services;

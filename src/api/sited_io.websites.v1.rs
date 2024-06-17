@@ -11,22 +11,40 @@ pub struct CustomizationResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PutCustomizationRequest {
+pub struct UpdateCustomizationRequest {
     #[prost(string, tag = "1")]
     pub website_id: ::prost::alloc::string::String,
     #[prost(string, optional, tag = "2")]
     pub primary_color: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "3")]
     pub secondary_color: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(string, optional, tag = "4")]
-    pub logo_image_url: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PutCustomizationResponse {
+pub struct UpdateCustomizationResponse {
     #[prost(message, optional, tag = "1")]
     pub customization: ::core::option::Option<CustomizationResponse>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PutLogoImageRequest {
+    #[prost(string, tag = "1")]
+    pub website_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub image: ::core::option::Option<super::super::media::v1::MediaUpload>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PutLogoImageResponse {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RemoveLogoImageRequest {
+    #[prost(string, tag = "1")]
+    pub website_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RemoveLogoImageResponse {}
 /// Generated server implementations.
 pub mod customization_service_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
@@ -34,11 +52,25 @@ pub mod customization_service_server {
     /// Generated trait containing gRPC methods that should be implemented for use with CustomizationServiceServer.
     #[async_trait]
     pub trait CustomizationService: Send + Sync + 'static {
-        async fn put_customization(
+        async fn update_customization(
             &self,
-            request: tonic::Request<super::PutCustomizationRequest>,
+            request: tonic::Request<super::UpdateCustomizationRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::PutCustomizationResponse>,
+            tonic::Response<super::UpdateCustomizationResponse>,
+            tonic::Status,
+        >;
+        async fn put_logo_image(
+            &self,
+            request: tonic::Request<super::PutLogoImageRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::PutLogoImageResponse>,
+            tonic::Status,
+        >;
+        async fn remove_logo_image(
+            &self,
+            request: tonic::Request<super::RemoveLogoImageRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::RemoveLogoImageResponse>,
             tonic::Status,
         >;
     }
@@ -122,25 +154,25 @@ pub mod customization_service_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/sited_io.websites.v1.CustomizationService/PutCustomization" => {
+                "/sited_io.websites.v1.CustomizationService/UpdateCustomization" => {
                     #[allow(non_camel_case_types)]
-                    struct PutCustomizationSvc<T: CustomizationService>(pub Arc<T>);
+                    struct UpdateCustomizationSvc<T: CustomizationService>(pub Arc<T>);
                     impl<
                         T: CustomizationService,
-                    > tonic::server::UnaryService<super::PutCustomizationRequest>
-                    for PutCustomizationSvc<T> {
-                        type Response = super::PutCustomizationResponse;
+                    > tonic::server::UnaryService<super::UpdateCustomizationRequest>
+                    for UpdateCustomizationSvc<T> {
+                        type Response = super::UpdateCustomizationResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::PutCustomizationRequest>,
+                            request: tonic::Request<super::UpdateCustomizationRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as CustomizationService>::put_customization(
+                                <T as CustomizationService>::update_customization(
                                         &inner,
                                         request,
                                     )
@@ -156,7 +188,104 @@ pub mod customization_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = PutCustomizationSvc(inner);
+                        let method = UpdateCustomizationSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/sited_io.websites.v1.CustomizationService/PutLogoImage" => {
+                    #[allow(non_camel_case_types)]
+                    struct PutLogoImageSvc<T: CustomizationService>(pub Arc<T>);
+                    impl<
+                        T: CustomizationService,
+                    > tonic::server::UnaryService<super::PutLogoImageRequest>
+                    for PutLogoImageSvc<T> {
+                        type Response = super::PutLogoImageResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::PutLogoImageRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as CustomizationService>::put_logo_image(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = PutLogoImageSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/sited_io.websites.v1.CustomizationService/RemoveLogoImage" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveLogoImageSvc<T: CustomizationService>(pub Arc<T>);
+                    impl<
+                        T: CustomizationService,
+                    > tonic::server::UnaryService<super::RemoveLogoImageRequest>
+                    for RemoveLogoImageSvc<T> {
+                        type Response = super::RemoveLogoImageResponse;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RemoveLogoImageRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as CustomizationService>::remove_logo_image(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = RemoveLogoImageSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

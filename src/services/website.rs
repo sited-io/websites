@@ -13,6 +13,7 @@ use crate::api::sited_io::websites::v1::{
 };
 use crate::auth::get_user_id;
 use crate::cloudflare::CloudflareService;
+use crate::images::ImageService;
 use crate::model::{Customization, Domain, Website};
 use crate::zitadel::ZitadelService;
 use crate::{
@@ -29,6 +30,7 @@ pub struct WebsiteService {
     fallback_domain: String,
     zitadel_service: ZitadelService,
     cloudflare_service: CloudflareService,
+    image_service: ImageService,
 }
 
 const WEBSITE_ID_LENGTH: usize = 14;
@@ -49,6 +51,7 @@ impl WebsiteService {
         fallback_domain: String,
         zitadel_service: ZitadelService,
         cloudflare_service: CloudflareService,
+        image_service: ImageService,
     ) -> WebsiteServiceServer<Self> {
         WebsiteServiceServer::new(Self {
             pool,
@@ -57,6 +60,7 @@ impl WebsiteService {
             fallback_domain,
             zitadel_service,
             cloudflare_service,
+            image_service,
         })
     }
 
@@ -68,9 +72,9 @@ impl WebsiteService {
             updated_at: datetime_to_timestamp(website.updated_at),
             name: website.name,
             client_id: website.client_id,
-            customization: website
-                .customization
-                .map(CustomizationService::to_response),
+            customization: website.customization.map(|c| {
+                CustomizationService::to_response(&self.image_service, c)
+            }),
             domains: website
                 .domains
                 .into_iter()

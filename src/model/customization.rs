@@ -72,7 +72,6 @@ impl Customization {
         user_id: &String,
         primary_color: Option<String>,
         secondary_color: Option<String>,
-        logo_image_url: Option<String>,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
 
@@ -81,8 +80,30 @@ impl Customization {
             .values([
                 (CustomizationIden::PrimaryColor, primary_color.into()),
                 (CustomizationIden::SecondaryColor, secondary_color.into()),
-                (CustomizationIden::LogoImageUrl, logo_image_url.into()),
             ])
+            .cond_where(all![
+                Expr::col(CustomizationIden::WebsiteId).eq(website_id),
+                Expr::col(CustomizationIden::UserId).eq(user_id)
+            ])
+            .returning_all()
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_one(sql.as_str(), &values.as_params()).await?;
+
+        Ok(Self::from(row))
+    }
+
+    pub async fn update_logo_image(
+        pool: &Pool,
+        website_id: &String,
+        user_id: &String,
+        logo_image_url: Option<String>,
+    ) -> Result<Self, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::update()
+            .table(CustomizationIden::Table)
+            .value(CustomizationIden::LogoImageUrl, logo_image_url)
             .cond_where(all![
                 Expr::col(CustomizationIden::WebsiteId).eq(website_id),
                 Expr::col(CustomizationIden::UserId).eq(user_id)
