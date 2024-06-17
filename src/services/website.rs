@@ -107,7 +107,7 @@ impl website_service_server::WebsiteService for WebsiteService {
             return Err(Status::invalid_argument("name is too short"));
         }
 
-        if Website::get_by_name(&self.pool, &name, Some(&user_id))
+        if Website::get_by_name(&self.pool, &name, &user_id)
             .await?
             .is_some()
         {

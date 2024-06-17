@@ -17,6 +17,7 @@ pub enum CustomizationIden {
     UserId,
     PrimaryColor,
     SecondaryColor,
+    LogoImageUrl,
 }
 
 #[derive(Debug, Clone)]
@@ -25,6 +26,7 @@ pub struct Customization {
     pub user_id: String,
     pub primary_color: Option<String>,
     pub secondary_color: Option<String>,
+    pub logo_image_url: Option<String>,
 }
 
 impl Customization {
@@ -70,6 +72,7 @@ impl Customization {
         user_id: &String,
         primary_color: Option<String>,
         secondary_color: Option<String>,
+        logo_image_url: Option<String>,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
 
@@ -78,6 +81,7 @@ impl Customization {
             .values([
                 (CustomizationIden::PrimaryColor, primary_color.into()),
                 (CustomizationIden::SecondaryColor, secondary_color.into()),
+                (CustomizationIden::LogoImageUrl, logo_image_url.into()),
             ])
             .cond_where(all![
                 Expr::col(CustomizationIden::WebsiteId).eq(website_id),
@@ -122,6 +126,8 @@ impl From<&Row> for Customization {
                 .get(CustomizationIden::PrimaryColor.to_string().as_str()),
             secondary_color: row
                 .get(CustomizationIden::SecondaryColor.to_string().as_str()),
+            logo_image_url: row
+                .get(CustomizationIden::LogoImageUrl.to_string().as_str()),
         }
     }
 }
@@ -136,16 +142,17 @@ impl From<Row> for Customization {
 pub struct CustomizationAsRel {
     pub primary_color: Option<String>,
     pub secondary_color: Option<String>,
+    pub logo_image_url: Option<String>,
 }
 
 impl CustomizationAsRel {
     pub fn add_join(query: &mut SelectStatement) {
         query
-            .column((CustomizationIden::Table, CustomizationIden::PrimaryColor))
-            .column((
-                CustomizationIden::Table,
-                CustomizationIden::SecondaryColor,
-            ))
+            .columns([
+                (CustomizationIden::Table, CustomizationIden::PrimaryColor),
+                (CustomizationIden::Table, CustomizationIden::SecondaryColor),
+                (CustomizationIden::Table, CustomizationIden::LogoImageUrl),
+            ])
             .left_join(
                 CustomizationIden::Table,
                 Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId)).equals(
@@ -155,6 +162,7 @@ impl CustomizationAsRel {
             .group_by_columns([
                 (CustomizationIden::Table, CustomizationIden::PrimaryColor),
                 (CustomizationIden::Table, CustomizationIden::SecondaryColor),
+                (CustomizationIden::Table, CustomizationIden::LogoImageUrl),
             ]);
     }
 }
@@ -169,6 +177,9 @@ impl TryFrom<&Row> for CustomizationAsRel {
             secondary_color: row.try_get(
                 CustomizationIden::SecondaryColor.to_string().as_str(),
             )?,
+            logo_image_url: row.try_get(
+                CustomizationIden::LogoImageUrl.to_string().as_str(),
+            )?,
         })
     }
 }
@@ -178,6 +189,7 @@ impl From<Customization> for CustomizationAsRel {
         Self {
             primary_color: customization.primary_color,
             secondary_color: customization.secondary_color,
+            logo_image_url: customization.logo_image_url,
         }
     }
 }

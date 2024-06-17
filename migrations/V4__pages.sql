@@ -4,7 +4,11 @@ CREATE TABLE pages (
   user_id VARCHAR NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() ON UPDATE NOW(),
-  title VARCHAR NOT NULL,
   page_type VARCHAR NOT NULL,
-  content_id VARCHAR NOT NULL
+  content_id VARCHAR NOT NULL,
+  title VARCHAR NOT NULL,
+  path VARCHAR NOT NULL,
+
+  UNIQUE INDEX uq_pages_website_id_title (website_id, title),
+  UNIQUE INDEX uq_pages_website_id_path (website_id, path)
 )

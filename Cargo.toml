@@ -22,6 +22,7 @@ sea-query-postgres = { version = "0.4.0", features = [
   "with-chrono",
 ] }
 serde = { version = "1.0.203", features = ["derive"] }
+slug = "0.1.5"
 tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros"] }
 tonic = "0.11.0"
 tonic-health = "0.11.0"

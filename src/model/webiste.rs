@@ -52,7 +52,7 @@ impl Website {
         Alias::new(Self::PAGES_ALIAS)
     }
 
-    fn select_with_relations() -> SelectStatement {
+    fn select_specific_with_relations(website_id: &String) -> SelectStatement {
         let mut query = Query::select();
 
         query
@@ -60,8 +60,34 @@ impl Website {
             .from(WebsiteIden::Table);
 
         CustomizationAsRel::add_join(&mut query);
-        DomainAsRel::add_join(&mut query, Self::get_domains_alias());
-        PageAsRel::add_join(&mut query, Self::get_pages_alias());
+        DomainAsRel::add_specific_subquery(
+            &mut query,
+            Self::get_domains_alias(),
+            website_id,
+        );
+        PageAsRel::add_specific_subquery(
+            &mut query,
+            Self::get_pages_alias(),
+            website_id,
+        );
+
+        query.group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
+
+        query
+    }
+
+    fn select_list_with_relations() -> SelectStatement {
+        let mut query = Query::select();
+
+        query
+            .column((WebsiteIden::Table, Asterisk))
+            .from(WebsiteIden::Table);
+
+        CustomizationAsRel::add_join(&mut query);
+        DomainAsRel::add_list_subquery(&mut query, Self::get_domains_alias());
+        PageAsRel::add_list_subquery(&mut query, Self::get_pages_alias());
+
+        query.group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
 
         query
     }
@@ -116,13 +142,14 @@ impl Website {
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
-        let (sql, values) = Self::select_with_relations()
+        let (sql, values) = Self::select_specific_with_relations(website_id)
             .cond_where(
                 Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
                     .eq(website_id),
             )
             .build_postgres(PostgresQueryBuilder);
 
+        println!("{}", sql.as_str());
         let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
 
         Ok(row.map(Self::from))
@@ -135,7 +162,7 @@ impl Website {
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
-        let (sql, values) = Self::select_with_relations()
+        let (sql, values) = Self::select_specific_with_relations(website_id)
             .cond_where(all![
                 Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
                     .eq(website_id),
@@ -155,7 +182,12 @@ impl Website {
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
-        let (sql, values) = Self::select_with_relations()
+        let (sql, values) = Self::select_list_with_relations()
+            .left_join(
+                DomainIden::Table,
+                Expr::col((DomainIden::Table, DomainIden::WebsiteId))
+                    .equals((WebsiteIden::Table, WebsiteIden::WebsiteId)),
+            )
             .cond_where(
                 Expr::col((DomainIden::Table, DomainIden::Domain)).eq(domain),
             )
@@ -169,25 +201,18 @@ impl Website {
     pub async fn get_by_name(
         pool: &Pool,
         name: &String,
-        user_id: Option<&String>,
+        user_id: &String,
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
-        let (sql, values) = {
-            let mut query = Self::select_with_relations();
-            query.cond_where(
-                Expr::col((WebsiteIden::Table, WebsiteIden::Name)).eq(name),
-            );
-
-            if let Some(user_id) = user_id {
-                query.cond_where(
-                    Expr::col((WebsiteIden::Table, WebsiteIden::UserId))
-                        .eq(user_id),
-                );
-            }
-
-            query.build_postgres(PostgresQueryBuilder)
-        };
+        let (sql, values) = Query::select()
+            .column(Asterisk)
+            .from(WebsiteIden::Table)
+            .cond_where(all![
+                Expr::col(WebsiteIden::Name).eq(name),
+                Expr::col(WebsiteIden::UserId).eq(user_id)
+            ])
+            .build_postgres(PostgresQueryBuilder);
 
         let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
 
@@ -204,7 +229,7 @@ impl Website {
         let transaction = conn.transaction().await?;
 
         let ((sql, values), (count_sql, count_values)) = {
-            let mut query = Self::select_with_relations();
+            let mut query = Self::select_list_with_relations();
             let mut count_query = Self::select_count();
 
             if let Some(user_id) = user_id {

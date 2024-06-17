@@ -6,7 +6,7 @@ use fallible_iterator::FallibleIterator;
 use postgres_protocol::types;
 use sea_query::{
     all, Alias, Asterisk, Expr, Func, Iden, PostgresQueryBuilder, Query,
-    SelectStatement,
+    SelectStatement, SimpleExpr,
 };
 use sea_query_postgres::PostgresBinder;
 
@@ -263,6 +263,50 @@ impl DomainAsRel {
                     .equals((DomainIden::Table, DomainIden::WebsiteId)),
             )
             .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
+    }
+
+    pub fn add_specific_subquery(
+        query: &mut SelectStatement,
+        alias: Alias,
+        website_id: &String,
+    ) {
+        let mut subquery = Self::get_subquery();
+        subquery.cond_where(
+            Expr::col((DomainIden::Table, DomainIden::WebsiteId))
+                .eq(website_id),
+        );
+        query.expr_as(
+            SimpleExpr::SubQuery(
+                None,
+                Box::new(subquery.into_sub_query_statement()),
+            ),
+            alias,
+        );
+    }
+
+    pub fn add_list_subquery(query: &mut SelectStatement, alias: Alias) {
+        query.expr_as(
+            SimpleExpr::SubQuery(
+                None,
+                Box::new(Self::get_subquery().into_sub_query_statement()),
+            ),
+            alias,
+        );
+    }
+
+    pub fn get_subquery() -> SelectStatement {
+        let mut query = Query::select();
+        query
+            .expr(
+                Func::cust(ArrayAgg).args([Expr::tuple([
+                    Expr::col((DomainIden::Table, DomainIden::DomainId)).into(),
+                    Expr::col((DomainIden::Table, DomainIden::Domain)).into(),
+                    Expr::col((DomainIden::Table, DomainIden::Status)).into(),
+                ])
+                .into()]),
+            )
+            .from(DomainIden::Table);
+        query
     }
 }
 

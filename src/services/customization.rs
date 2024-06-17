@@ -31,6 +31,7 @@ impl CustomizationService {
         CustomizationResponse {
             primary_color: customization.primary_color,
             secondary_color: customization.secondary_color,
+            logo_image_url: customization.logo_image_url,
         }
     }
 }
@@ -49,6 +50,7 @@ impl customization_service_server::CustomizationService
             website_id,
             primary_color,
             secondary_color,
+            logo_image_url,
         } = request.into_inner();
 
         let updated_customization = Customization::update(
@@ -57,6 +59,7 @@ impl customization_service_server::CustomizationService
             &user_id,
             primary_color,
             secondary_color,
+            logo_image_url,
         )
         .await?;
 

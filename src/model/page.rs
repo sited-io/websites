@@ -6,7 +6,7 @@ use fallible_iterator::FallibleIterator;
 use postgres_protocol::types;
 use sea_query::{
     all, Alias, Asterisk, Expr, Func, Iden, PostgresQueryBuilder, Query,
-    SelectStatement,
+    SelectStatement, SimpleExpr,
 };
 use sea_query_postgres::PostgresBinder;
 
@@ -23,9 +23,10 @@ pub enum PageIden {
     UserId,
     CreatedAt,
     UpdatedAt,
-    Title,
     PageType,
     ContentId,
+    Title,
+    Path,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +39,7 @@ pub struct Page {
     pub page_type: String,
     pub content_id: String,
     pub title: String,
+    pub path: String,
 }
 
 impl Page {
@@ -48,6 +50,7 @@ impl Page {
         page_type: &str,
         content_id: &String,
         title: &String,
+        path: &String,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
 
@@ -59,6 +62,7 @@ impl Page {
                 PageIden::PageType,
                 PageIden::ContentId,
                 PageIden::Title,
+                PageIden::Path,
             ])
             .values([
                 website_id.into(),
@@ -66,6 +70,7 @@ impl Page {
                 page_type.into(),
                 content_id.into(),
                 title.into(),
+                path.into(),
             ])?
             .returning_all()
             .build_postgres(PostgresQueryBuilder);
@@ -85,6 +90,27 @@ impl Page {
             .column(Asterisk)
             .from(PageIden::Table)
             .cond_where(Expr::col(PageIden::PageId).eq(page_id))
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
+
+        Ok(row.map(Self::from))
+    }
+
+    pub async fn get_by_path(
+        pool: &Pool,
+        website_id: &String,
+        path: &String,
+    ) -> Result<Option<Self>, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::select()
+            .column(Asterisk)
+            .from(PageIden::Table)
+            .cond_where(all![
+                Expr::col(PageIden::WebsiteId).eq(website_id),
+                Expr::col(PageIden::Path).eq(path)
+            ])
             .build_postgres(PostgresQueryBuilder);
 
         let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
@@ -139,6 +165,7 @@ impl Page {
         page_type: Option<&str>,
         content_id: Option<String>,
         title: Option<String>,
+        path: Option<String>,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
 
@@ -156,6 +183,10 @@ impl Page {
 
             if let Some(title) = title {
                 query.value(PageIden::Title, title);
+            }
+
+            if let Some(path) = path {
+                query.value(PageIden::Path, path);
             }
 
             query
@@ -204,6 +235,7 @@ impl From<&Row> for Page {
             page_type: row.get(PageIden::PageType.to_string().as_str()),
             content_id: row.get(PageIden::ContentId.to_string().as_str()),
             title: row.get(PageIden::Title.to_string().as_str()),
+            path: row.get(PageIden::Path.to_string().as_str()),
         }
     }
 }
@@ -217,9 +249,10 @@ impl From<Row> for Page {
 #[derive(Debug, Clone)]
 pub struct PageAsRel {
     pub page_id: i64,
-    pub title: String,
     pub page_type: String,
     pub content_id: String,
+    pub title: String,
+    pub path: String,
 }
 
 impl PageAsRel {
@@ -231,6 +264,7 @@ impl PageAsRel {
                     Expr::col((PageIden::Table, PageIden::PageType)).into(),
                     Expr::col((PageIden::Table, PageIden::ContentId)).into(),
                     Expr::col((PageIden::Table, PageIden::Title)).into(),
+                    Expr::col((PageIden::Table, PageIden::Path)).into(),
                 ])
                 .into()]),
                 alias,
@@ -239,8 +273,53 @@ impl PageAsRel {
                 PageIden::Table,
                 Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
                     .equals((PageIden::Table, PageIden::WebsiteId)),
+            );
+        // .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
+    }
+
+    pub fn add_specific_subquery(
+        query: &mut SelectStatement,
+        alias: Alias,
+        website_id: &String,
+    ) {
+        let mut subquery = Self::get_subquery();
+        subquery.cond_where(
+            Expr::col((PageIden::Table, PageIden::WebsiteId)).eq(website_id),
+        );
+        query.expr_as(
+            SimpleExpr::SubQuery(
+                None,
+                Box::new(subquery.into_sub_query_statement()),
+            ),
+            alias,
+        );
+    }
+
+    pub fn add_list_subquery(query: &mut SelectStatement, alias: Alias) {
+        query.expr_as(
+            SimpleExpr::SubQuery(
+                None,
+                Box::new(Self::get_subquery().into_sub_query_statement()),
+            ),
+            alias,
+        );
+    }
+
+    fn get_subquery() -> SelectStatement {
+        let mut query = Query::select();
+        query
+            .expr(
+                Func::cust(ArrayAgg).args([Expr::tuple([
+                    Expr::col((PageIden::Table, PageIden::PageId)).into(),
+                    Expr::col((PageIden::Table, PageIden::PageType)).into(),
+                    Expr::col((PageIden::Table, PageIden::ContentId)).into(),
+                    Expr::col((PageIden::Table, PageIden::Title)).into(),
+                    Expr::col((PageIden::Table, PageIden::Path)).into(),
+                ])
+                .into()]),
             )
-            .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
+            .from(PageIden::Table);
+        query
     }
 }
 
@@ -271,11 +350,16 @@ impl<'a> FromSql<'a> for PageAsRel {
         let ty = get_type_from_oid::<String>(oid)?;
         let title: String = private::read_value(&ty, &mut raw)?;
 
+        let oid = private::read_be_i32(&mut raw)?;
+        let ty = get_type_from_oid::<String>(oid)?;
+        let path: String = private::read_value(&ty, &mut raw)?;
+
         Ok(Self {
             page_id,
             page_type,
             content_id,
             title,
+            path,
         })
     }
 }
@@ -287,6 +371,7 @@ impl From<Page> for PageAsRel {
             page_type: page.page_type,
             content_id: page.content_id,
             title: page.title,
+            path: page.path,
         }
     }
 }

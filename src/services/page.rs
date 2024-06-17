@@ -1,5 +1,6 @@
 use deadpool_postgres::Pool;
 use jwtk::jwk::RemoteJwksVerifier;
+use slug::slugify;
 use tonic::{async_trait, Request, Response, Status};
 
 use crate::api::sited_io::websites::v1::page_service_server::{
@@ -23,6 +24,8 @@ pub struct PageService {
 }
 
 impl PageService {
+    const HOME_PAGE_PATH: &'static str = "/";
+
     pub fn build(
         pool: Pool,
         verifier: RemoteJwksVerifier,
@@ -34,9 +37,10 @@ impl PageService {
         let page: PageAsRel = page.into();
         PageResponse {
             page_id: page.page_id,
-            title: page.title,
             page_type: PageType::from_str_name(&page.page_type).unwrap().into(),
             content_id: page.content_id,
+            title: page.title,
+            path: page.path,
         }
     }
 
@@ -48,6 +52,14 @@ impl PageService {
             Err(Status::invalid_argument("Please provide known page type"))
         } else {
             Ok(page_type)
+        }
+    }
+
+    fn get_path(is_home_page: bool, title: &String) -> String {
+        if is_home_page {
+            Self::HOME_PAGE_PATH.to_string()
+        } else {
+            slugify(title)
         }
     }
 }
@@ -65,8 +77,10 @@ impl page_service_server::PageService for PageService {
             page_type,
             content_id,
             title,
+            is_home_page,
         } = request.into_inner();
         let page_type = Self::page_type_from_request(page_type)?;
+        let path = Self::get_path(is_home_page, &title);
 
         Website::get_for_user(&self.pool, &website_id, &user_id)
             .await?
@@ -84,6 +98,7 @@ impl page_service_server::PageService for PageService {
             page_type.as_str_name(),
             &content_id,
             &title,
+            &path,
         )
         .await?;
 
@@ -96,9 +111,21 @@ impl page_service_server::PageService for PageService {
         &self,
         request: Request<GetPageRequest>,
     ) -> Result<Response<GetPageResponse>, Status> {
-        let GetPageRequest { page_id } = request.into_inner();
+        let GetPageRequest {
+            page_id,
+            website_id,
+            path,
+        } = request.into_inner();
 
-        let found_page = Page::get(&self.pool, page_id).await?;
+        let found_page = match (page_id, website_id, path) {
+            (Some(page_id), _, _) => Page::get(&self.pool, page_id).await?,
+            (_, Some(website_id), Some(path)) => {
+                Page::get_by_path(&self.pool, &website_id, &path).await?
+            }
+            _ => return Err(Status::invalid_argument(
+                "Please provide either page_id or both of website_id and path",
+            )),
+        };
 
         Ok(Response::new(GetPageResponse {
             page: found_page.map(Self::to_response),
@@ -139,6 +166,7 @@ impl page_service_server::PageService for PageService {
             page_type,
             content_id,
             title,
+            is_home_page,
         } = request.into_inner();
 
         let page_type = match page_type {
@@ -146,8 +174,14 @@ impl page_service_server::PageService for PageService {
             None => None,
         };
 
+        let path = match (is_home_page, &title) {
+            (Some(is_home_page), Some(title)) => Some(Self::get_path(is_home_page, title)),
+            (None, None) => None,
+            _ => return Err(Status::invalid_argument("Please provide either both of title and is_home_page or none of them"))
+        };
+
         let updated_page = Page::update(
-            &self.pool, page_id, &user_id, page_type, content_id, title,
+            &self.pool, page_id, &user_id, page_type, content_id, title, path,
         )
         .await?;
 
