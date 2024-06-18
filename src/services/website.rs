@@ -211,7 +211,7 @@ impl website_service_server::WebsiteService for WebsiteService {
         pagination.total_elements = i64_to_u32(count)?;
 
         Ok(Response::new(ListWebsitesResponse {
-            webistes: found_websites
+            websites: found_websites
                 .into_iter()
                 .map(|w| self.to_response(w))
                 .collect(),

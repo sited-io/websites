@@ -1290,7 +1290,7 @@ pub struct ListWebsitesRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWebsitesResponse {
     #[prost(message, repeated, tag = "1")]
-    pub webistes: ::prost::alloc::vec::Vec<WebsiteResponse>,
+    pub websites: ::prost::alloc::vec::Vec<WebsiteResponse>,
     #[prost(message, optional, tag = "2")]
     pub pagination: ::core::option::Option<
         super::super::pagination::v1::PaginationResponse,
