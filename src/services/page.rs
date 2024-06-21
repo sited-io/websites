@@ -59,7 +59,7 @@ impl PageService {
         if is_home_page {
             Self::HOME_PAGE_PATH.to_string()
         } else {
-            slugify(title)
+            format!("/{}", slugify(title))
         }
     }
 }
