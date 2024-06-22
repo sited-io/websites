@@ -5,8 +5,8 @@ use deadpool_postgres::Pool;
 use fallible_iterator::FallibleIterator;
 use postgres_protocol::types;
 use sea_query::{
-    all, Alias, Asterisk, Expr, Func, Iden, PostgresQueryBuilder, Query,
-    SelectStatement, SimpleExpr,
+    all, Alias, Asterisk, Expr, Func, Iden, JoinType, PostgresQueryBuilder,
+    Query, SelectStatement,
 };
 use sea_query_postgres::PostgresBinder;
 
@@ -258,68 +258,34 @@ pub struct PageAsRel {
 impl PageAsRel {
     pub fn add_join(query: &mut SelectStatement, alias: Alias) {
         query
-            .expr_as(
-                Func::cust(ArrayAgg).args([Expr::tuple([
-                    Expr::col((PageIden::Table, PageIden::PageId)).into(),
-                    Expr::col((PageIden::Table, PageIden::PageType)).into(),
-                    Expr::col((PageIden::Table, PageIden::ContentId)).into(),
-                    Expr::col((PageIden::Table, PageIden::Title)).into(),
-                    Expr::col((PageIden::Table, PageIden::Path)).into(),
-                ])
-                .into()]),
-                alias,
-            )
-            .left_join(
-                PageIden::Table,
+            .column((PageIden::Table, alias.clone()))
+            .join_subquery(
+                JoinType::LeftJoin,
+                Query::select()
+                    .column(PageIden::WebsiteId)
+                    .expr_as(
+                        Func::cust(ArrayAgg).args([Expr::tuple([
+                            Expr::col((PageIden::Table, PageIden::PageId))
+                                .into(),
+                            Expr::col((PageIden::Table, PageIden::PageType))
+                                .into(),
+                            Expr::col((PageIden::Table, PageIden::ContentId))
+                                .into(),
+                            Expr::col((PageIden::Table, PageIden::Title))
+                                .into(),
+                            Expr::col((PageIden::Table, PageIden::Path)).into(),
+                        ])
+                        .into()]),
+                        alias.clone(),
+                    )
+                    .from(PageIden::Table)
+                    .group_by_col(PageIden::WebsiteId)
+                    .take(),
+                alias.clone(),
                 Expr::col((WebsiteIden::Table, WebsiteIden::WebsiteId))
                     .equals((PageIden::Table, PageIden::WebsiteId)),
-            );
-        // .group_by_col((WebsiteIden::Table, WebsiteIden::WebsiteId));
-    }
-
-    pub fn add_specific_subquery(
-        query: &mut SelectStatement,
-        alias: Alias,
-        website_id: &String,
-    ) {
-        let mut subquery = Self::get_subquery();
-        subquery.cond_where(
-            Expr::col((PageIden::Table, PageIden::WebsiteId)).eq(website_id),
-        );
-        query.expr_as(
-            SimpleExpr::SubQuery(
-                None,
-                Box::new(subquery.into_sub_query_statement()),
-            ),
-            alias,
-        );
-    }
-
-    pub fn add_list_subquery(query: &mut SelectStatement, alias: Alias) {
-        query.expr_as(
-            SimpleExpr::SubQuery(
-                None,
-                Box::new(Self::get_subquery().into_sub_query_statement()),
-            ),
-            alias,
-        );
-    }
-
-    fn get_subquery() -> SelectStatement {
-        let mut query = Query::select();
-        query
-            .expr(
-                Func::cust(ArrayAgg).args([Expr::tuple([
-                    Expr::col((PageIden::Table, PageIden::PageId)).into(),
-                    Expr::col((PageIden::Table, PageIden::PageType)).into(),
-                    Expr::col((PageIden::Table, PageIden::ContentId)).into(),
-                    Expr::col((PageIden::Table, PageIden::Title)).into(),
-                    Expr::col((PageIden::Table, PageIden::Path)).into(),
-                ])
-                .into()]),
             )
-            .from(PageIden::Table);
-        query
+            .group_by_col((PageIden::Table, alias));
     }
 }
 

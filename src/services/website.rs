@@ -181,7 +181,10 @@ impl website_service_server::WebsiteService for WebsiteService {
                     Website::get(&self.pool, &website_id).await?
                 }
                 (_, Some(domain)) => {
-                    Website::get_by_domain(&self.pool, &domain).await?
+                    let domain = Domain::get_by_domain(&self.pool, &domain)
+                        .await?
+                        .ok_or_else(|| Status::not_found(""))?;
+                    Website::get(&self.pool, &domain.website_id).await?
                 }
                 _ => return Err(Status::invalid_argument(
                     "Please provide at least one of 'website_id' or 'domain'",
