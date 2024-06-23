@@ -14,7 +14,7 @@ use crate::api::sited_io::websites::v1::{
 use crate::auth::get_user_id;
 use crate::cloudflare::CloudflareService;
 use crate::images::ImageService;
-use crate::model::{Customization, Domain, Website};
+use crate::model::{Customization, Domain, Page, Website};
 use crate::zitadel::ZitadelService;
 use crate::{
     datetime_to_timestamp, i64_to_u32, CustomizationService, DomainService,
@@ -282,6 +282,8 @@ impl website_service_server::WebsiteService for WebsiteService {
 
             Domain::delete_for_website(&self.pool, &website_id, &user_id)
                 .await?;
+
+            Page::delete_for_website(&self.pool, &website_id, &user_id).await?;
 
             Website::delete(&self.pool, &website_id, &user_id).await?;
         }

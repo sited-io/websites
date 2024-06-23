@@ -222,6 +222,26 @@ impl Page {
 
         Ok(())
     }
+
+    pub async fn delete_for_website(
+        pool: &Pool,
+        website_id: &String,
+        user_id: &String,
+    ) -> Result<(), DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::delete()
+            .from_table(PageIden::Table)
+            .cond_where(all![
+                Expr::col(WebsiteIden::WebsiteId).eq(website_id),
+                Expr::col(WebsiteIden::UserId).eq(user_id)
+            ])
+            .build_postgres(PostgresQueryBuilder);
+
+        conn.query(sql.as_str(), &values.as_params()).await?;
+
+        Ok(())
+    }
 }
 
 impl From<&Row> for Page {
