@@ -5,7 +5,8 @@ use zitadel::api::zitadel::app::v1::{
 };
 use zitadel::api::zitadel::management::v1::management_service_client::ManagementServiceClient;
 use zitadel::api::zitadel::management::v1::{
-    AddOidcAppRequest, AddOidcAppResponse, RemoveAppRequest, RemoveAppResponse,
+    AddOidcAppRequest, AddOidcAppResponse, GetAppByIdRequest,
+    GetAppByIdResponse, RemoveAppRequest, RemoveAppResponse,
 };
 use zitadel::api::zitadel::user::v1::AccessTokenType;
 
@@ -56,6 +57,19 @@ impl ZitadelService {
             .insert("authorization", self.service_user_token.parse().unwrap());
 
         self.management_service_client.add_oidc_app(req).await
+    }
+
+    pub async fn get_app(
+        &mut self,
+        app_id: String,
+    ) -> Result<Response<GetAppByIdResponse>, Status> {
+        let mut req = Request::new(GetAppByIdRequest {
+            project_id: self.project_id.clone(),
+            app_id,
+        });
+        req.metadata_mut()
+            .insert("authorization", self.service_user_token.parse().unwrap());
+        self.management_service_client.get_app_by_id(req).await
     }
 
     pub async fn remove_app(

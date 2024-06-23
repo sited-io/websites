@@ -250,9 +250,15 @@ impl website_service_server::WebsiteService for WebsiteService {
             Website::get(&self.pool, &website_id).await?
         {
             let mut zitadel_service = self.zitadel_service.clone();
-            zitadel_service
-                .remove_app(found_website.zitadel_app_id)
-                .await?;
+
+            if let Some(app) = zitadel_service
+                .get_app(found_website.zitadel_app_id)
+                .await
+                .ok()
+                .and_then(|f| f.into_inner().app)
+            {
+                zitadel_service.remove_app(app.id).await?;
+            }
 
             for domain in found_website.domains {
                 let found_records = self
