@@ -8,8 +8,8 @@ use crate::api::sited_io::websites::v1::{
     website_service_server, CreateWebsiteRequest, CreateWebsiteResponse,
     DeleteWebsiteRequest, DeleteWebsiteResponse, DomainStatus,
     GetWebsiteRequest, GetWebsiteResponse, ListWebsitesRequest,
-    ListWebsitesResponse, UpdateWebsiteRequest, UpdateWebsiteResponse,
-    WebsiteResponse,
+    ListWebsitesResponse, PageType, UpdateWebsiteRequest,
+    UpdateWebsiteResponse, WebsiteResponse,
 };
 use crate::auth::get_user_id;
 use crate::cloudflare::CloudflareService;
@@ -159,6 +159,17 @@ impl website_service_server::WebsiteService for WebsiteService {
             &user_id,
             &domain,
             DomainStatus::Internal.as_str_name(),
+        )
+        .await?;
+
+        Page::create(
+            &self.pool,
+            &website_id,
+            &user_id,
+            PageType::Static.as_str_name(),
+            &"".to_string(),
+            &PageService::DEFAULT_HOME_PAGE_TITLE.to_string(),
+            &PageService::HOME_PAGE_PATH.to_string(),
         )
         .await?;
 

@@ -24,7 +24,8 @@ pub struct PageService {
 }
 
 impl PageService {
-    const HOME_PAGE_PATH: &'static str = "/";
+    pub const HOME_PAGE_PATH: &'static str = "/";
+    pub const DEFAULT_HOME_PAGE_TITLE: &'static str = "Home";
 
     pub fn build(
         pool: Pool,
@@ -197,6 +198,14 @@ impl page_service_server::PageService for PageService {
         let user_id = get_user_id(request.metadata(), &self.verifier).await?;
 
         let DeletePageRequest { page_id } = request.into_inner();
+
+        let found_page = Page::get(&self.pool, page_id)
+            .await?
+            .ok_or_else(|| Status::not_found(""))?;
+
+        if found_page.path == Self::HOME_PAGE_PATH {
+            return Err(Status::invalid_argument("Cannot delete home page"));
+        }
 
         Page::delete(&self.pool, page_id, &user_id).await?;
 
