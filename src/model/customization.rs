@@ -66,6 +66,27 @@ impl Customization {
         Ok(row.map(Self::from))
     }
 
+    pub async fn get_for_user(
+        pool: &Pool,
+        website_id: &String,
+        user_id: &String,
+    ) -> Result<Option<Self>, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::select()
+            .column(Asterisk)
+            .from(CustomizationIden::Table)
+            .cond_where(all![
+                Expr::col(CustomizationIden::WebsiteId).eq(website_id),
+                Expr::col(CustomizationIden::UserId).eq(user_id)
+            ])
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
+
+        Ok(row.map(Self::from))
+    }
+
     pub async fn update(
         pool: &Pool,
         website_id: &String,

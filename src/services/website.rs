@@ -241,6 +241,11 @@ impl website_service_server::WebsiteService for WebsiteService {
 
         let UpdateWebsiteRequest { website_id, name } = request.into_inner();
 
+        if matches!(&name, Some(name) if name.len() < MININUM_WEBSITE_NAME_LENGTH)
+        {
+            return Err(Status::invalid_argument("name is too short"));
+        }
+
         let updated_website =
             Website::update(&self.pool, &website_id, &user_id, &name).await?;
 
@@ -257,53 +262,63 @@ impl website_service_server::WebsiteService for WebsiteService {
 
         let DeleteWebsiteRequest { website_id } = request.into_inner();
 
-        if let Some(found_website) =
-            Website::get(&self.pool, &website_id).await?
+        let found_website = Website::get(&self.pool, &website_id)
+            .await?
+            .ok_or_else(|| {
+                Status::not_found(format!(
+                    "Could not find website by websiteId '{}'",
+                    website_id
+                ))
+            })?;
+
+        let mut zitadel_service = self.zitadel_service.clone();
+
+        if let Some(app) = zitadel_service
+            .get_app(found_website.zitadel_app_id)
+            .await
+            .ok()
+            .and_then(|f| f.into_inner().app)
         {
-            let mut zitadel_service = self.zitadel_service.clone();
-
-            if let Some(app) = zitadel_service
-                .get_app(found_website.zitadel_app_id)
-                .await
-                .ok()
-                .and_then(|f| f.into_inner().app)
-            {
-                zitadel_service.remove_app(app.id).await?;
-            }
-
-            for domain in found_website.domains {
-                let found_records = self
-                    .cloudflare_service
-                    .list_dns_records(Some(domain.domain.clone()))
-                    .await?;
-                for record in found_records.result {
-                    self.cloudflare_service
-                        .delete_dns_record(record.id)
-                        .await?;
-                }
-
-                if domain.status == DomainStatus::Active.as_str_name() {
-                    let found_custom_hostnames = self
-                        .cloudflare_service
-                        .list_custom_hostnames(&domain.domain)
-                        .await?;
-                    for custom_hostname in found_custom_hostnames.result {
-                        self.cloudflare_service
-                            .delete_custom_hostname(custom_hostname.id)
-                            .await?;
-                    }
-                }
-            }
-
-            Customization::delete(&self.pool, &website_id, &user_id).await?;
-
-            Domain::delete_for_website(&self.pool, &website_id, &user_id)
-                .await?;
-
-            Page::delete_for_website(&self.pool, &website_id, &user_id).await?;
-
-            Website::delete(&self.pool, &website_id, &user_id).await?;
+            zitadel_service.remove_app(app.id).await?;
         }
+
+        for domain in found_website.domains {
+            let found_records = self
+                .cloudflare_service
+                .list_dns_records(Some(domain.domain.clone()))
+                .await?;
+            for record in found_records.result {
+                self.cloudflare_service.delete_dns_record(record.id).await?;
+            }
+
+            if domain.status == DomainStatus::Active.as_str_name() {
+                let found_custom_hostnames = self
+                    .cloudflare_service
+                    .list_custom_hostnames(&domain.domain)
+                    .await?;
+                for custom_hostname in found_custom_hostnames.result {
+                    self.cloudflare_service
+                        .delete_custom_hostname(custom_hostname.id)
+                        .await?;
+                }
+            }
+        }
+
+        if let Some(logo) =
+            Customization::get_for_user(&self.pool, &website_id, &user_id)
+                .await?
+                .and_then(|c| c.logo_image_url)
+        {
+            self.image_service.remove_image(&logo).await?;
+        }
+
+        Customization::delete(&self.pool, &website_id, &user_id).await?;
+
+        Domain::delete_for_website(&self.pool, &website_id, &user_id).await?;
+
+        Page::delete_for_website(&self.pool, &website_id, &user_id).await?;
+
+        Website::delete(&self.pool, &website_id, &user_id).await?;
 
         Ok(Response::new(DeleteWebsiteResponse::default()))
     }
