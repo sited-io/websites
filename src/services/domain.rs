@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use deadpool_postgres::Pool;
+use http::Uri;
 use jwtk::jwk::RemoteJwksVerifier;
 use tonic::{async_trait, Request, Response, Status};
 
@@ -44,6 +45,28 @@ impl DomainService {
             domain_id: domain.domain_id,
             domain: domain.domain,
             status: DomainStatus::from_str_name(&domain.status).unwrap().into(),
+        }
+    }
+
+    pub fn validate_domain(input: &String) -> Result<(), Status> {
+        if !input.contains('.') {
+            return Err(Status::invalid_argument(
+                "Domain must contain a dot ('.')",
+            ));
+        }
+
+        let parsed = input
+            .parse::<Uri>()
+            .map_err(|_| Status::invalid_argument("Domain is not valid"))?;
+
+        let host = parsed
+            .host()
+            .ok_or_else(|| Status::invalid_argument("Domain is not valid"))?;
+
+        if host != input {
+            Err(Status::invalid_argument("Domain is not valid"))
+        } else {
+            Ok(())
         }
     }
 
@@ -93,6 +116,8 @@ impl domain_service_server::DomainService for DomainService {
         let user_id = get_user_id(request.metadata(), &self.verifier).await?;
 
         let CreateDomainRequest { website_id, domain } = request.into_inner();
+
+        Self::validate_domain(&domain)?;
 
         if Website::get(&self.pool, &website_id)
             .await?
