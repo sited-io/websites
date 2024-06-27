@@ -1,5 +1,6 @@
 use deadpool_postgres::Pool;
 use jwtk::jwk::RemoteJwksVerifier;
+use prost::Message;
 use tonic::{async_trait, Request, Response, Status};
 use zitadel::api::zitadel::management::v1::AddOidcAppResponse;
 
@@ -31,6 +32,7 @@ pub struct WebsiteService {
     zitadel_service: ZitadelService,
     cloudflare_service: CloudflareService,
     image_service: ImageService,
+    nats_client: async_nats::Client,
 }
 
 const WEBSITE_ID_LENGTH: usize = 14;
@@ -43,6 +45,9 @@ const DOMAIN_ALPHABET: [char; 36] = [
     'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
+const WEBSITE_UPSERT_SUBJECT: &str = "websites.website.upsert";
+const WEBSITE_DELETE_SUBJECT: &str = "websites.website.delete";
+
 impl WebsiteService {
     pub fn build(
         pool: Pool,
@@ -52,6 +57,7 @@ impl WebsiteService {
         zitadel_service: ZitadelService,
         cloudflare_service: CloudflareService,
         image_service: ImageService,
+        nats_client: async_nats::Client,
     ) -> WebsiteServiceServer<Self> {
         WebsiteServiceServer::new(Self {
             pool,
@@ -61,6 +67,7 @@ impl WebsiteService {
             zitadel_service,
             cloudflare_service,
             image_service,
+            nats_client,
         })
     }
 
@@ -94,6 +101,28 @@ impl WebsiteService {
 
     fn build_main_domain(&self, website_id: &String) -> String {
         format!("{}.{}", website_id, self.main_domain)
+    }
+
+    async fn publish_website(
+        &self,
+        website: &WebsiteResponse,
+        is_delete: bool,
+    ) -> Result<(), Status> {
+        let subject = if is_delete {
+            WEBSITE_DELETE_SUBJECT
+        } else {
+            WEBSITE_UPSERT_SUBJECT
+        };
+        self.nats_client
+            .publish(subject, website.encode_to_vec().into())
+            .await
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[WebsiteService.publish_website]: {}",
+                    err
+                );
+                Status::internal("")
+            })
     }
 }
 
@@ -173,8 +202,12 @@ impl website_service_server::WebsiteService for WebsiteService {
         )
         .await?;
 
+        let website_response = self.to_response(created_website);
+
+        self.publish_website(&website_response, false).await?;
+
         Ok(Response::new(CreateWebsiteResponse {
-            website: Some(self.to_response(created_website)),
+            website: Some(website_response),
         }))
     }
 
@@ -249,8 +282,12 @@ impl website_service_server::WebsiteService for WebsiteService {
         let updated_website =
             Website::update(&self.pool, &website_id, &user_id, &name).await?;
 
+        let website_response = self.to_response(updated_website);
+
+        self.publish_website(&website_response, false).await?;
+
         Ok(Response::new(UpdateWebsiteResponse {
-            website: Some(self.to_response(updated_website)),
+            website: Some(website_response),
         }))
     }
 
@@ -318,7 +355,11 @@ impl website_service_server::WebsiteService for WebsiteService {
 
         Page::delete_for_website(&self.pool, &website_id, &user_id).await?;
 
-        Website::delete(&self.pool, &website_id, &user_id).await?;
+        let deleted_website =
+            Website::delete(&self.pool, &website_id, &user_id).await?;
+
+        self.publish_website(&self.to_response(deleted_website), true)
+            .await?;
 
         Ok(Response::new(DeleteWebsiteResponse::default()))
     }

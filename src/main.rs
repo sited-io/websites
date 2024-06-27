@@ -51,6 +51,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await;
 
+    // initialize NATS client
+    let nats_client = async_nats::ConnectOptions::new()
+        .user_and_password(
+            get_env_var("NATS_USER"),
+            get_env_var("NATS_PASSWORD"),
+        )
+        .connect(get_env_var("NATS_HOST"))
+        .await?;
+
     let (mut health_reporter, health_service) =
         tonic_health::server::health_reporter();
     health_reporter
@@ -80,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?,
         cloudflare_service.clone(),
         image_service.clone(),
+        nats_client.clone(),
     );
 
     let customization_service = CustomizationService::build(
