@@ -63,6 +63,33 @@ impl PageService {
             format!("/{}", slugify(title))
         }
     }
+
+    async fn switch_home_page(
+        &self,
+        website_id: &String,
+        user_id: &String,
+    ) -> Result<(), Status> {
+        if let Some(found_home_page) = Page::get_by_path(
+            &self.pool,
+            website_id,
+            &Self::HOME_PAGE_PATH.to_string(),
+        )
+        .await?
+        {
+            Page::update(
+                &self.pool,
+                found_home_page.page_id,
+                user_id,
+                None,
+                None,
+                None,
+                Some(Self::get_path(false, &found_home_page.title)),
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -91,6 +118,10 @@ impl page_service_server::PageService for PageService {
                     website_id
                 ))
             })?;
+
+        if is_home_page {
+            self.switch_home_page(&website_id, &user_id).await?;
+        }
 
         let created_page = Page::create(
             &self.pool,
@@ -180,6 +211,12 @@ impl page_service_server::PageService for PageService {
             (None, None) => None,
             _ => return Err(Status::invalid_argument("Please provide either both of title and is_home_page or none of them"))
         };
+
+        if matches!(is_home_page, Some(true)) {
+            if let Some(page) = Page::get(&self.pool, page_id).await? {
+                self.switch_home_page(&page.website_id, &user_id).await?;
+            }
+        }
 
         let updated_page = Page::update(
             &self.pool, page_id, &user_id, page_type, content_id, title, path,

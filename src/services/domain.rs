@@ -49,9 +49,9 @@ impl DomainService {
     }
 
     pub fn validate_domain(input: &String) -> Result<(), Status> {
-        if !input.contains('.') {
+        if !input.contains('.') || input.ends_with('.') {
             return Err(Status::invalid_argument(
-                "Domain must contain a dot ('.')",
+                "Domain must contain a dot ('.') and must not end on a dot",
             ));
         }
 
@@ -224,15 +224,16 @@ impl domain_service_server::DomainService for DomainService {
             Domain::get_for_user(&self.pool, domain_id, &user_id).await?
         {
             if found_domain.status != DomainStatus::Internal.as_str_name() {
-                let found_custom_hostnames = self
+                if let Ok(found_custom_hostnames) = self
                     .cloudflare_service
                     .list_custom_hostnames(&found_domain.domain)
-                    .await?;
-
-                for custom_hostname in found_custom_hostnames.result {
-                    self.cloudflare_service
-                        .delete_custom_hostname(custom_hostname.id)
-                        .await?;
+                    .await
+                {
+                    for custom_hostname in found_custom_hostnames.result {
+                        self.cloudflare_service
+                            .delete_custom_hostname(custom_hostname.id)
+                            .await?;
+                    }
                 }
 
                 Domain::delete(
