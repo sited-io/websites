@@ -49,6 +49,7 @@ const WEBSITE_UPSERT_SUBJECT: &str = "websites.website.upsert";
 const WEBSITE_DELETE_SUBJECT: &str = "websites.website.delete";
 
 impl WebsiteService {
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         pool: Pool,
         verifier: RemoteJwksVerifier,
@@ -154,21 +155,41 @@ impl website_service_server::WebsiteService for WebsiteService {
         let redirect_uri = format!("https://{}/user/sign-in-callback", domain);
         let post_logout_redirect_uri = format!("https://{}", domain);
 
-        let res = zitadel_service
+        let res = match zitadel_service
             .add_app(
                 domain.clone(),
                 vec![redirect_uri],
                 vec![post_logout_redirect_uri],
             )
-            .await?;
+            .await
+        {
+            Ok(res) => res,
+            Err(err) => {
+                tracing::log::error!(
+                    "[WebsiteService.create_website] add_app: {}",
+                    err
+                );
+                return Err(Status::internal("Could not create ZITADEL app"));
+            }
+        };
 
         let AddOidcAppResponse {
             client_id, app_id, ..
         } = res.into_inner();
 
-        self.cloudflare_service
+        if let Err(err) = self
+            .cloudflare_service
             .create_dns_record(domain.clone(), self.fallback_domain.clone())
-            .await?;
+            .await
+        {
+            tracing::log::error!(
+                "[WebsiteService.create_website] create_dns_record: {}",
+                err
+            );
+            return Err(Status::internal(
+                "Error while adding dns record to cloudflare",
+            ));
+        }
 
         let created_website = Website::create(
             &self.pool,
