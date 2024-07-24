@@ -719,7 +719,9 @@ pub struct PageResponse {
     pub content_id: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub title: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(bool, tag = "5")]
+    pub is_home_page: bool,
+    #[prost(string, tag = "6")]
     pub path: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -735,6 +737,8 @@ pub struct CreatePageRequest {
     pub title: ::prost::alloc::string::String,
     #[prost(bool, tag = "5")]
     pub is_home_page: bool,
+    #[prost(string, optional, tag = "6")]
+    pub path: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -791,6 +795,8 @@ pub struct UpdatePageRequest {
     pub title: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(bool, optional, tag = "5")]
     pub is_home_page: ::core::option::Option<bool>,
+    #[prost(string, optional, tag = "6")]
+    pub path: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

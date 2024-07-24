@@ -219,6 +219,7 @@ impl website_service_server::WebsiteService for WebsiteService {
             PageType::Static.as_str_name(),
             &"".to_string(),
             &PageService::DEFAULT_HOME_PAGE_TITLE.to_string(),
+            true,
             &PageService::HOME_PAGE_PATH.to_string(),
         )
         .await?;

@@ -41,6 +41,7 @@ impl PageService {
             page_type: PageType::from_str_name(&page.page_type).unwrap().into(),
             content_id: page.content_id,
             title: page.title,
+            is_home_page: page.is_home_page,
             path: page.path,
         }
     }
@@ -56,39 +57,8 @@ impl PageService {
         }
     }
 
-    fn get_path(is_home_page: bool, title: &String) -> String {
-        if is_home_page {
-            Self::HOME_PAGE_PATH.to_string()
-        } else {
-            format!("/{}", slugify(title))
-        }
-    }
-
-    async fn switch_home_page(
-        &self,
-        website_id: &String,
-        user_id: &String,
-    ) -> Result<(), Status> {
-        if let Some(found_home_page) = Page::get_by_path(
-            &self.pool,
-            website_id,
-            &Self::HOME_PAGE_PATH.to_string(),
-        )
-        .await?
-        {
-            Page::update(
-                &self.pool,
-                found_home_page.page_id,
-                user_id,
-                None,
-                None,
-                None,
-                Some(Self::get_path(false, &found_home_page.title)),
-            )
-            .await?;
-        }
-
-        Ok(())
+    fn get_slugified_path(title: &String) -> String {
+        format!("/{}", slugify(title))
     }
 }
 
@@ -106,9 +76,12 @@ impl page_service_server::PageService for PageService {
             content_id,
             title,
             is_home_page,
+            path,
         } = request.into_inner();
+
         let page_type = Self::page_type_from_request(page_type)?;
-        let path = Self::get_path(is_home_page, &title);
+
+        let mut path = path.unwrap_or_else(|| Self::get_slugified_path(&title));
 
         Website::get_for_user(&self.pool, &website_id, &user_id)
             .await?
@@ -120,7 +93,23 @@ impl page_service_server::PageService for PageService {
             })?;
 
         if is_home_page {
-            self.switch_home_page(&website_id, &user_id).await?;
+            if let Some(current_home_page) =
+                Page::get_home_page(&self.pool, &website_id).await?
+            {
+                Page::update(
+                    &self.pool,
+                    current_home_page.page_id,
+                    &user_id,
+                    None,
+                    None,
+                    None,
+                    Some(false),
+                    Some(Self::get_slugified_path(&current_home_page.title)),
+                )
+                .await?;
+            }
+
+            path = Self::HOME_PAGE_PATH.to_string();
         }
 
         let created_page = Page::create(
@@ -130,6 +119,7 @@ impl page_service_server::PageService for PageService {
             page_type.as_str_name(),
             &content_id,
             &title,
+            is_home_page,
             &path,
         )
         .await?;
@@ -199,6 +189,7 @@ impl page_service_server::PageService for PageService {
             content_id,
             title,
             is_home_page,
+            mut path,
         } = request.into_inner();
 
         let page_type = match page_type {
@@ -206,20 +197,40 @@ impl page_service_server::PageService for PageService {
             None => None,
         };
 
-        let path = match (is_home_page, &title) {
-            (Some(is_home_page), Some(title)) => Some(Self::get_path(is_home_page, title)),
-            (None, None) => None,
-            _ => return Err(Status::invalid_argument("Please provide either both of title and is_home_page or none of them"))
-        };
-
         if matches!(is_home_page, Some(true)) {
-            if let Some(page) = Page::get(&self.pool, page_id).await? {
-                self.switch_home_page(&page.website_id, &user_id).await?;
+            let found_page =
+                Page::get(&self.pool, page_id).await?.ok_or_else(|| {
+                    Status::not_found("Could not find page to update")
+                })?;
+
+            if let Some(current_home_page) =
+                Page::get_home_page(&self.pool, &found_page.website_id).await?
+            {
+                Page::update(
+                    &self.pool,
+                    current_home_page.page_id,
+                    &user_id,
+                    None,
+                    None,
+                    None,
+                    Some(false),
+                    Some(Self::get_slugified_path(&current_home_page.title)),
+                )
+                .await?;
             }
+
+            path = Some(Self::HOME_PAGE_PATH.to_string());
         }
 
         let updated_page = Page::update(
-            &self.pool, page_id, &user_id, page_type, content_id, title, path,
+            &self.pool,
+            page_id,
+            &user_id,
+            page_type,
+            content_id,
+            title,
+            is_home_page,
+            path,
         )
         .await?;
 

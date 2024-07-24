@@ -26,6 +26,7 @@ pub enum PageIden {
     PageType,
     ContentId,
     Title,
+    IsHomePage,
     Path,
 }
 
@@ -39,6 +40,7 @@ pub struct Page {
     pub page_type: String,
     pub content_id: String,
     pub title: String,
+    pub is_home_page: bool,
     pub path: String,
 }
 
@@ -50,6 +52,7 @@ impl Page {
         page_type: &str,
         content_id: &String,
         title: &String,
+        is_home_page: bool,
         path: &String,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
@@ -62,6 +65,7 @@ impl Page {
                 PageIden::PageType,
                 PageIden::ContentId,
                 PageIden::Title,
+                PageIden::IsHomePage,
                 PageIden::Path,
             ])
             .values([
@@ -70,6 +74,7 @@ impl Page {
                 page_type.into(),
                 content_id.into(),
                 title.into(),
+                is_home_page.into(),
                 path.into(),
             ])?
             .returning_all()
@@ -110,6 +115,26 @@ impl Page {
             .cond_where(all![
                 Expr::col(PageIden::WebsiteId).eq(website_id),
                 Expr::col(PageIden::Path).eq(path)
+            ])
+            .build_postgres(PostgresQueryBuilder);
+
+        let row = conn.query_opt(sql.as_str(), &values.as_params()).await?;
+
+        Ok(row.map(Self::from))
+    }
+
+    pub async fn get_home_page(
+        pool: &Pool,
+        website_id: &String,
+    ) -> Result<Option<Self>, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::select()
+            .column(Asterisk)
+            .from(PageIden::Table)
+            .cond_where(all![
+                Expr::col(PageIden::WebsiteId).eq(website_id),
+                Expr::col(PageIden::IsHomePage).eq(true)
             ])
             .build_postgres(PostgresQueryBuilder);
 
@@ -165,6 +190,7 @@ impl Page {
         page_type: Option<&str>,
         content_id: Option<String>,
         title: Option<String>,
+        is_home_page: Option<bool>,
         path: Option<String>,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
@@ -183,6 +209,10 @@ impl Page {
 
             if let Some(title) = title {
                 query.value(PageIden::Title, title);
+            }
+
+            if let Some(is_home_page) = is_home_page {
+                query.value(PageIden::IsHomePage, is_home_page);
             }
 
             if let Some(path) = path {
@@ -255,6 +285,7 @@ impl From<&Row> for Page {
             page_type: row.get(PageIden::PageType.to_string().as_str()),
             content_id: row.get(PageIden::ContentId.to_string().as_str()),
             title: row.get(PageIden::Title.to_string().as_str()),
+            is_home_page: row.get(PageIden::IsHomePage.to_string().as_str()),
             path: row.get(PageIden::Path.to_string().as_str()),
         }
     }
@@ -272,6 +303,7 @@ pub struct PageAsRel {
     pub page_type: String,
     pub content_id: String,
     pub title: String,
+    pub is_home_page: bool,
     pub path: String,
 }
 
@@ -292,6 +324,8 @@ impl PageAsRel {
                             Expr::col((PageIden::Table, PageIden::ContentId))
                                 .into(),
                             Expr::col((PageIden::Table, PageIden::Title))
+                                .into(),
+                            Expr::col((PageIden::Table, PageIden::IsHomePage))
                                 .into(),
                             Expr::col((PageIden::Table, PageIden::Path)).into(),
                         ])
@@ -337,6 +371,10 @@ impl<'a> FromSql<'a> for PageAsRel {
         let title: String = private::read_value(&ty, &mut raw)?;
 
         let oid = private::read_be_i32(&mut raw)?;
+        let ty = get_type_from_oid::<bool>(oid)?;
+        let is_home_page: bool = private::read_value(&ty, &mut raw)?;
+
+        let oid = private::read_be_i32(&mut raw)?;
         let ty = get_type_from_oid::<String>(oid)?;
         let path: String = private::read_value(&ty, &mut raw)?;
 
@@ -345,6 +383,7 @@ impl<'a> FromSql<'a> for PageAsRel {
             page_type,
             content_id,
             title,
+            is_home_page,
             path,
         })
     }
@@ -357,6 +396,7 @@ impl From<Page> for PageAsRel {
             page_type: page.page_type,
             content_id: page.content_id,
             title: page.title,
+            is_home_page: page.is_home_page,
             path: page.path,
         }
     }
