@@ -45,6 +45,7 @@ pub struct Page {
 }
 
 impl Page {
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &Pool,
         website_id: &String,
@@ -183,6 +184,7 @@ impl Page {
         Ok((rows.iter().map(Self::from).collect(), count))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update(
         pool: &Pool,
         page_id: i64,

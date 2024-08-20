@@ -12,7 +12,7 @@ use websites::logging::{LogOnFailure, LogOnRequest, LogOnResponse};
 use websites::zitadel::ZitadelService;
 use websites::{
     get_env_var, init_jwks_verifier, CustomizationService, DomainService,
-    PageService, WebsiteService,
+    PageService, StaticPageService, WebsiteService,
 };
 
 #[tokio::main]
@@ -105,8 +105,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cloudflare_service,
     );
 
-    let page_service =
-        PageService::build(db_pool, init_jwks_verifier(&jwks_host, &jwks_url)?);
+    let page_service = PageService::build(
+        db_pool.clone(),
+        init_jwks_verifier(&jwks_host, &jwks_url)?,
+    );
+
+    let static_page_service = StaticPageService::build(
+        db_pool,
+        init_jwks_verifier(&jwks_host, &jwks_url)?,
+    );
 
     tracing::log::info!("gRPC+web server listening on {}", host);
 
@@ -139,6 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(tonic_web::enable(customization_service))
         .add_service(tonic_web::enable(domain_service))
         .add_service(tonic_web::enable(page_service))
+        .add_service(tonic_web::enable(static_page_service))
         .serve(host.parse().unwrap())
         .await?;
 

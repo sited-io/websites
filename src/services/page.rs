@@ -1,5 +1,6 @@
 use deadpool_postgres::Pool;
 use jwtk::jwk::RemoteJwksVerifier;
+use serde_json::Value;
 use slug::slugify;
 use tonic::{async_trait, Request, Response, Status};
 
@@ -14,7 +15,7 @@ use crate::api::sited_io::websites::v1::{
 };
 use crate::auth::get_user_id;
 use crate::i64_to_u32;
-use crate::model::{Page, PageAsRel, Website};
+use crate::model::{Page, PageAsRel, StaticPage, Website};
 
 use super::get_limit_offset_from_pagination;
 
@@ -50,7 +51,7 @@ impl PageService {
         let page_type = PageType::try_from(page_type).map_err(|_| {
             Status::invalid_argument(format!("Unknown page type {}", page_type))
         })?;
-        if page_type == PageType::Uspecified {
+        if page_type == PageType::Unspecified {
             Err(Status::invalid_argument("Please provide known page type"))
         } else {
             Ok(page_type)
@@ -59,6 +60,50 @@ impl PageService {
 
     fn get_slugified_path(title: &String) -> String {
         format!("/{}", slugify(title))
+    }
+
+    async fn make_current_home_page_not_home_page(
+        &self,
+        website_id: &String,
+        user_id: &String,
+    ) -> Result<(), Status> {
+        if let Some(current_home_page) =
+            Page::get_home_page(&self.pool, website_id).await?
+        {
+            Page::update(
+                &self.pool,
+                current_home_page.page_id,
+                user_id,
+                None,
+                None,
+                None,
+                Some(false),
+                Some(Self::get_slugified_path(&current_home_page.title)),
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn ensure_static_page(
+        &self,
+        page_id: i64,
+        website_id: &String,
+        user_id: &String,
+    ) -> Result<(), Status> {
+        if StaticPage::get(&self.pool, page_id).await?.is_none() {
+            StaticPage::create(
+                &self.pool,
+                page_id,
+                website_id,
+                user_id,
+                Value::Array(Vec::new()),
+            )
+            .await?;
+        }
+
+        Ok(())
     }
 }
 
@@ -93,21 +138,8 @@ impl page_service_server::PageService for PageService {
             })?;
 
         if is_home_page {
-            if let Some(current_home_page) =
-                Page::get_home_page(&self.pool, &website_id).await?
-            {
-                Page::update(
-                    &self.pool,
-                    current_home_page.page_id,
-                    &user_id,
-                    None,
-                    None,
-                    None,
-                    Some(false),
-                    Some(Self::get_slugified_path(&current_home_page.title)),
-                )
+            self.make_current_home_page_not_home_page(&website_id, &user_id)
                 .await?;
-            }
 
             path = Self::HOME_PAGE_PATH.to_string();
         }
@@ -123,6 +155,15 @@ impl page_service_server::PageService for PageService {
             &path,
         )
         .await?;
+
+        if page_type == PageType::Static {
+            self.ensure_static_page(
+                created_page.page_id,
+                &website_id,
+                &user_id,
+            )
+            .await?;
+        }
 
         Ok(Response::new(CreatePageResponse {
             page: Some(Self::to_response(created_page)),
@@ -192,35 +233,25 @@ impl page_service_server::PageService for PageService {
             mut path,
         } = request.into_inner();
 
-        let page_type = match page_type {
-            Some(p) => Some(Self::page_type_from_request(p)?.as_str_name()),
-            None => None,
-        };
-
         if matches!(is_home_page, Some(true)) {
             let found_page =
                 Page::get(&self.pool, page_id).await?.ok_or_else(|| {
                     Status::not_found("Could not find page to update")
                 })?;
 
-            if let Some(current_home_page) =
-                Page::get_home_page(&self.pool, &found_page.website_id).await?
-            {
-                Page::update(
-                    &self.pool,
-                    current_home_page.page_id,
-                    &user_id,
-                    None,
-                    None,
-                    None,
-                    Some(false),
-                    Some(Self::get_slugified_path(&current_home_page.title)),
-                )
-                .await?;
-            }
+            self.make_current_home_page_not_home_page(
+                &found_page.website_id,
+                &user_id,
+            )
+            .await?;
 
             path = Some(Self::HOME_PAGE_PATH.to_string());
         }
+
+        let page_type = match page_type {
+            Some(p) => Some(Self::page_type_from_request(p)?.as_str_name()),
+            None => None,
+        };
 
         let updated_page = Page::update(
             &self.pool,
@@ -233,6 +264,15 @@ impl page_service_server::PageService for PageService {
             path,
         )
         .await?;
+
+        if page_type.is_some_and(|p| p == PageType::Static.as_str_name()) {
+            self.ensure_static_page(
+                page_id,
+                &updated_page.website_id,
+                &user_id,
+            )
+            .await?;
+        }
 
         Ok(Response::new(UpdatePageResponse {
             page: Some(Self::to_response(updated_page)),
@@ -254,6 +294,8 @@ impl page_service_server::PageService for PageService {
         if found_page.path == Self::HOME_PAGE_PATH {
             return Err(Status::invalid_argument("Cannot delete home page"));
         }
+
+        StaticPage::delete(&self.pool, page_id, &user_id).await?;
 
         Page::delete(&self.pool, page_id, &user_id).await?;
 
