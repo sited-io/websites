@@ -1,6 +1,5 @@
 use deadpool_postgres::Pool;
 use jwtk::jwk::RemoteJwksVerifier;
-use prost::Message;
 use tonic::{async_trait, Request, Response, Status};
 use zitadel::api::zitadel::management::v1::AddOidcAppResponse;
 
@@ -16,6 +15,7 @@ use crate::auth::get_user_id;
 use crate::cloudflare::CloudflareService;
 use crate::images::ImageService;
 use crate::model::{Customization, Domain, Page, Website};
+use crate::publisher::Publisher;
 use crate::zitadel::ZitadelService;
 use crate::{
     datetime_to_timestamp, i64_to_u32, CustomizationService, DomainService,
@@ -32,7 +32,7 @@ pub struct WebsiteService {
     zitadel_service: ZitadelService,
     cloudflare_service: CloudflareService,
     image_service: ImageService,
-    nats_client: async_nats::Client,
+    publisher: Publisher,
 }
 
 const WEBSITE_ID_LENGTH: usize = 14;
@@ -45,9 +45,6 @@ const DOMAIN_ALPHABET: [char; 36] = [
     'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-const WEBSITE_UPSERT_SUBJECT: &str = "websites.website.upsert";
-const WEBSITE_DELETE_SUBJECT: &str = "websites.website.delete";
-
 impl WebsiteService {
     #[allow(clippy::too_many_arguments)]
     pub fn build(
@@ -58,7 +55,7 @@ impl WebsiteService {
         zitadel_service: ZitadelService,
         cloudflare_service: CloudflareService,
         image_service: ImageService,
-        nats_client: async_nats::Client,
+        publisher: Publisher,
     ) -> WebsiteServiceServer<Self> {
         WebsiteServiceServer::new(Self {
             pool,
@@ -68,7 +65,7 @@ impl WebsiteService {
             zitadel_service,
             cloudflare_service,
             image_service,
-            nats_client,
+            publisher,
         })
     }
 
@@ -102,28 +99,6 @@ impl WebsiteService {
 
     fn build_main_domain(&self, website_id: &String) -> String {
         format!("{}.{}", website_id, self.main_domain)
-    }
-
-    async fn publish_website(
-        &self,
-        website: &WebsiteResponse,
-        is_delete: bool,
-    ) -> Result<(), Status> {
-        let subject = if is_delete {
-            WEBSITE_DELETE_SUBJECT
-        } else {
-            WEBSITE_UPSERT_SUBJECT
-        };
-        self.nats_client
-            .publish(subject, website.encode_to_vec().into())
-            .await
-            .map_err(|err| {
-                tracing::log::error!(
-                    "[WebsiteService.publish_website]: {}",
-                    err
-                );
-                Status::internal("")
-            })
     }
 }
 
@@ -226,7 +201,9 @@ impl website_service_server::WebsiteService for WebsiteService {
 
         let website_response = self.to_response(created_website);
 
-        self.publish_website(&website_response, false).await?;
+        self.publisher
+            .publish_website(&website_response, false)
+            .await;
 
         Ok(Response::new(CreateWebsiteResponse {
             website: Some(website_response),
@@ -306,7 +283,9 @@ impl website_service_server::WebsiteService for WebsiteService {
 
         let website_response = self.to_response(updated_website);
 
-        self.publish_website(&website_response, false).await?;
+        self.publisher
+            .publish_website(&website_response, false)
+            .await;
 
         Ok(Response::new(UpdateWebsiteResponse {
             website: Some(website_response),
@@ -380,8 +359,9 @@ impl website_service_server::WebsiteService for WebsiteService {
         let deleted_website =
             Website::delete(&self.pool, &website_id, &user_id).await?;
 
-        self.publish_website(&self.to_response(deleted_website), true)
-            .await?;
+        self.publisher
+            .publish_website(&self.to_response(deleted_website), true)
+            .await;
 
         Ok(Response::new(DeleteWebsiteResponse::default()))
     }

@@ -9,6 +9,7 @@ use websites::cloudflare::CloudflareService;
 use websites::db::{init_db_pool, migrate};
 use websites::images::ImageService;
 use websites::logging::{LogOnFailure, LogOnRequest, LogOnResponse};
+use websites::publisher::Publisher;
 use websites::zitadel::ZitadelService;
 use websites::{
     get_env_var, init_jwks_verifier, CustomizationService, DomainService,
@@ -51,14 +52,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await;
 
-    // initialize NATS client
-    let nats_client = async_nats::ConnectOptions::new()
-        .user_and_password(
-            get_env_var("NATS_USER"),
-            get_env_var("NATS_PASSWORD"),
-        )
-        .connect(get_env_var("NATS_HOST"))
-        .await?;
+    // initialize publisher
+    let publisher = Publisher::new(
+        async_nats::ConnectOptions::new()
+            .user_and_password(
+                get_env_var("NATS_USER"),
+                get_env_var("NATS_PASSWORD"),
+            )
+            .connect(get_env_var("NATS_HOST"))
+            .await?,
+    );
 
     let (mut health_reporter, health_service) =
         tonic_health::server::health_reporter();
@@ -89,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?,
         cloudflare_service.clone(),
         image_service.clone(),
-        nats_client.clone(),
+        publisher,
     );
 
     let customization_service = CustomizationService::build(

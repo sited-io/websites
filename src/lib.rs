@@ -1,3 +1,6 @@
+use chrono::{DateTime, Utc};
+use tonic::Status;
+
 pub mod api;
 mod auth;
 pub mod cloudflare;
@@ -5,14 +8,12 @@ pub mod db;
 pub mod images;
 pub mod logging;
 mod model;
+pub mod publisher;
 mod services;
 pub mod zitadel;
 
-use chrono::{DateTime, Utc};
-
 pub use auth::init_jwks_verifier;
 pub use services::*;
-use tonic::Status;
 
 pub fn get_env_var(var: &str) -> String {
     std::env::var(var).unwrap_or_else(|_| {
