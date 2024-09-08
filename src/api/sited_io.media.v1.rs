@@ -85,7 +85,7 @@ pub struct DownloadMediaResponse {
 pub struct MediaOrderBy {
     #[prost(enumeration = "MediaOrderByField", tag = "1")]
     pub field: i32,
-    #[prost(enumeration = "super::super::ordering::v1::Direction", tag = "2")]
+    #[prost(enumeration = "super::super::types::v1::Direction", tag = "2")]
     pub direction: i32,
 }
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -104,9 +104,7 @@ pub struct ListMediaRequest {
     #[prost(string, tag = "1")]
     pub shop_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
-    pub pagination: ::core::option::Option<
-        super::super::pagination::v1::PaginationRequest,
-    >,
+    pub pagination: ::core::option::Option<super::super::types::v1::PaginationRequest>,
     #[prost(message, optional, tag = "3")]
     pub order_by: ::core::option::Option<MediaOrderBy>,
     #[prost(message, optional, tag = "4")]
@@ -119,18 +117,14 @@ pub struct ListMediaResponse {
     #[prost(message, repeated, tag = "1")]
     pub medias: ::prost::alloc::vec::Vec<MediaResponse>,
     #[prost(message, optional, tag = "2")]
-    pub pagination: ::core::option::Option<
-        super::super::pagination::v1::PaginationResponse,
-    >,
+    pub pagination: ::core::option::Option<super::super::types::v1::PaginationResponse>,
 }
 #[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAccessibleMediaRequest {
     #[prost(message, optional, tag = "2")]
-    pub pagination: ::core::option::Option<
-        super::super::pagination::v1::PaginationRequest,
-    >,
+    pub pagination: ::core::option::Option<super::super::types::v1::PaginationRequest>,
     #[prost(message, optional, tag = "3")]
     pub order_by: ::core::option::Option<MediaOrderBy>,
     #[prost(message, optional, tag = "4")]
@@ -143,9 +137,7 @@ pub struct ListAccessibleMediaResponse {
     #[prost(message, repeated, tag = "1")]
     pub medias: ::prost::alloc::vec::Vec<MediaResponse>,
     #[prost(message, optional, tag = "2")]
-    pub pagination: ::core::option::Option<
-        super::super::pagination::v1::PaginationResponse,
-    >,
+    pub pagination: ::core::option::Option<super::super::types::v1::PaginationResponse>,
 }
 #[derive(serde::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
