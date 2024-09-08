@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use http::header::AUTHORIZATION;
-use http::{HeaderMap, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tonic::Status;
