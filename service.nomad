@@ -53,7 +53,7 @@ HOST='0.0.0.0:{{ env "NOMAD_PORT_grpc" }}'
 
 DB_HOST='{{ env "NOMAD_UPSTREAM_IP_postgres-sql" }}'
 DB_PORT='{{ env "NOMAD_UPSTREAM_PORT_postgres-sql" }}'
-{{ with nomadVar "nomad/jobs/webistes"}}
+{{ with nomadVar "nomad/jobs/websites"}}
 DB_DBNAME='{{ .DB_DBNAME }}'
 DB_USER='{{ .DB_USER }}'
 {{ end }}
