@@ -152,10 +152,13 @@ pub async fn migrate(pool: &Pool) -> Result<(), Box<dyn std::error::Error>> {
 
     let runner = embedded::migrations::runner();
     runner.get_migrations();
-    runner
+    if let Err(err) = runner
         .set_target(Target::Latest)
         .run_async(client.deref_mut().deref_mut())
-        .await?;
+        .await
+    {
+        tracing::error!("Error while running migrations: {}", err);
+    }
 
     Ok(())
 }
