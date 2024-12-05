@@ -56,6 +56,7 @@ DB_PORT='{{ env "NOMAD_UPSTREAM_PORT_postgres-sql" }}'
 {{ with nomadVar "nomad/jobs/webistes"}}
 DB_DBNAME='{{ .DB_DBNAME }}'
 DB_USER='{{ .DB_USER }}'
+{{ end }}
 {{ with secret "database/static-creds/websites_user" }}
 DB_PASSWORD='{{ .Data.password }}'
 {{ end }}
