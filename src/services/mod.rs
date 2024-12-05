@@ -6,7 +6,9 @@ mod website;
 
 use tonic::Status;
 
-use crate::api::sited_io::types::v1::{PaginationRequest, PaginationResponse};
+use service_apis::sited_io::types::v1::{
+    PaginationRequest, PaginationResponse,
+};
 
 pub use customization::CustomizationService;
 pub use domain::DomainService;

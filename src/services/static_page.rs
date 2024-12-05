@@ -2,13 +2,14 @@ use deadpool_postgres::Pool;
 use jwtk::jwk::RemoteJwksVerifier;
 use tonic::{async_trait, Request, Response, Status};
 
-use crate::api::sited_io::websites::v1::static_page_service_server::{
+use service_apis::sited_io::websites::v1::static_page_service_server::{
     self, StaticPageServiceServer,
 };
-use crate::api::sited_io::websites::v1::{
+use service_apis::sited_io::websites::v1::{
     GetStaticPageRequest, GetStaticPageResponse, StaticPageResponse,
     UpdateStaticPageRequest, UpdateStaticPageResponse,
 };
+
 use crate::auth::get_user_id;
 use crate::model::StaticPage;
 

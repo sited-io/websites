@@ -4,7 +4,8 @@ use tonic::transport::Server;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
-use websites::api::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
+use service_apis::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
+
 use websites::cloudflare::CloudflareService;
 use websites::db::{init_db_pool, migrate};
 use websites::images::ImageService;
@@ -68,16 +69,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     health_reporter
         .set_serving::<WebsiteServiceServer<WebsiteService>>()
         .await;
-
-    let reflection_service = tonic_reflection::server::Builder::configure()
-        .register_encoded_file_descriptor_set(
-            tonic_health::pb::FILE_DESCRIPTOR_SET,
-        )
-        .register_encoded_file_descriptor_set(
-            websites::api::sited_io::FILE_DESCRIPTOR_SET,
-        )
-        .build()
-        .unwrap();
 
     let website_service = WebsiteService::build(
         db_pool.clone(),
@@ -143,7 +134,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .allow_origin(AllowOrigin::any())
                 .allow_private_network(true),
         )
-        .add_service(tonic_web::enable(reflection_service))
         .add_service(tonic_web::enable(health_service))
         .add_service(tonic_web::enable(website_service))
         .add_service(tonic_web::enable(customization_service))

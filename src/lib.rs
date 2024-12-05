@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use tonic::Status;
 
-pub mod api;
 mod auth;
 pub mod cloudflare;
 pub mod db;

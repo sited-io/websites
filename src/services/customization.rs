@@ -3,14 +3,15 @@ use jwtk::jwk::RemoteJwksVerifier;
 use tonic::{async_trait, Request, Response, Status};
 use uuid::Uuid;
 
-use crate::api::sited_io::websites::v1::customization_service_server::{
+use service_apis::sited_io::websites::v1::customization_service_server::{
     self, CustomizationServiceServer,
 };
-use crate::api::sited_io::websites::v1::{
+use service_apis::sited_io::websites::v1::{
     CustomizationResponse, PutLogoImageRequest, PutLogoImageResponse,
     RemoveLogoImageRequest, RemoveLogoImageResponse,
     UpdateCustomizationRequest, UpdateCustomizationResponse,
 };
+
 use crate::auth::get_user_id;
 use crate::images::ImageService;
 use crate::model::{Customization, CustomizationAsRel};

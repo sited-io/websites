@@ -4,23 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-nats = "0.35.1"
-aws-config = { version = "1.5.1", default-features = false, features = [
+async-nats = "0.36.0"
+aws-config = { version = "1.5.10", default-features = false, features = [
   "rt-tokio",
   "behavior-version-latest",
 ] }
-aws-credential-types = { version = "1.2.0", default-features = false, features = [
+aws-credential-types = { version = "1.2.1", default-features = false, features = [
   "hardcoded-credentials",
 ] }
-aws-sdk-s3 = { version = "1.36.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.65.0", default-features = false, features = [
   "rt-tokio",
   "rustls",
 ] }
 chrono = "0.4.38"
 deadpool-postgres = "0.14.0"
 fallible-iterator = "0.2.0"
-http = { version = "1.1.0", default-features = false }
-image = { version = "0.25.1", default-features = false, features = [
+http = { version = "1.2.0", default-features = false }
+image = { version = "0.25.5", default-features = false, features = [
   "jpeg",
   "png",
   "webp",
@@ -28,10 +28,10 @@ image = { version = "0.25.1", default-features = false, features = [
 infer = { version = "0.16.0", default-features = false }
 jwtk = "0.3.0"
 nanoid = "0.4.0"
-openssl = { version = "0.10.64", features = ["vendored"] }
+openssl = { version = "0.10.68", features = ["vendored"] }
 postgres-openssl = "0.5.0"
-postgres-protocol = "0.6.6"
-prost = { version = "0.13.2", default-features = false }
+postgres-protocol = "0.6.7"
+prost = { version = "0.13.3", default-features = false }
 refinery = { version = "0.8.14", features = ["tokio-postgres"] }
 reqwest = { version = "0.11.27", default-features = false, features = ["json"] }
 sea-query = "0.30.7"
@@ -40,24 +40,24 @@ sea-query-postgres = { version = "0.4.0", features = [
   "with-chrono",
   "with-json",
 ] }
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0.125"
-slug = "0.1.5"
-tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros"] }
-tonic = "0.12.2"
-tonic-health = "0.12.2"
-tonic-reflection = "0.12.2"
-tonic-web = "0.12.2"
+serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.133"
+slug = "0.1.6"
+tokio = { version = "1.42.0", features = ["rt-multi-thread", "macros"] }
+tonic = "0.12.3"
+tonic-health = "0.12.3"
+tonic-web = "0.12.3"
 tower-http = { version = "0.5.2", features = ["trace", "cors"] }
-tracing = { version = "0.1.40", features = ["log"] }
-tracing-subscriber = { version = "0.3.18", features = ["tracing-log"] }
-uuid = { version = "1.8.0", features = ["v4"] }
+tracing = { version = "0.1.41", features = ["log"] }
+tracing-subscriber = { version = "0.3.19", features = ["tracing-log"] }
+uuid = { version = "1.11.0", features = ["v4"] }
 webp = { version = "0.3.0", default-features = false, features = ["img"] }
-zitadel = { version = "5.2.0", features = [
+zitadel = { version = "5.3.2", features = [
   "api",
   "interceptors",
   "credentials",
 ] }
 
-[build-dependencies]
-tonic-build = "0.12.2"
+[dependencies.service-apis]
+git = "https://github.com/sited-io/service-apis.git"
+features = ["sited_io-websites-v1"]

@@ -4,15 +4,16 @@ use serde_json::Value;
 use slug::slugify;
 use tonic::{async_trait, Request, Response, Status};
 
-use crate::api::sited_io::websites::v1::page_service_server::{
+use service_apis::sited_io::websites::v1::page_service_server::{
     self, PageServiceServer,
 };
-use crate::api::sited_io::websites::v1::{
+use service_apis::sited_io::websites::v1::{
     CreatePageRequest, CreatePageResponse, DeletePageRequest,
     DeletePageResponse, GetPageRequest, GetPageResponse, ListPagesRequest,
     ListPagesResponse, PageResponse, PageType, UpdatePageRequest,
     UpdatePageResponse,
 };
+
 use crate::auth::get_user_id;
 use crate::i64_to_u32;
 use crate::model::{Page, PageAsRel, StaticPage, Website};

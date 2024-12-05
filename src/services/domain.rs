@@ -5,14 +5,15 @@ use http::Uri;
 use jwtk::jwk::RemoteJwksVerifier;
 use tonic::{async_trait, Request, Response, Status};
 
-use crate::api::sited_io::websites::v1::domain_service_server::{
+use service_apis::sited_io::websites::v1::domain_service_server::{
     self, DomainServiceServer,
 };
-use crate::api::sited_io::websites::v1::{
+use service_apis::sited_io::websites::v1::{
     CheckDomainStatusRequest, CheckDomainStatusResponse, CreateDomainRequest,
     CreateDomainResponse, DeleteDomainRequest, DeleteDomainResponse,
     DomainResponse, DomainStatus,
 };
+
 use crate::auth::get_user_id;
 use crate::cloudflare::{CloudflareService, DnsLookupResponse};
 use crate::model::{Domain, DomainAsRel, Website};

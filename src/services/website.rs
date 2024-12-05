@@ -3,14 +3,15 @@ use jwtk::jwk::RemoteJwksVerifier;
 use tonic::{async_trait, Request, Response, Status};
 use zitadel::api::zitadel::management::v1::AddOidcAppResponse;
 
-use crate::api::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
-use crate::api::sited_io::websites::v1::{
+use service_apis::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
+use service_apis::sited_io::websites::v1::{
     website_service_server, CreateWebsiteRequest, CreateWebsiteResponse,
     DeleteWebsiteRequest, DeleteWebsiteResponse, DomainStatus,
     GetWebsiteRequest, GetWebsiteResponse, ListWebsitesRequest,
     ListWebsitesResponse, PageType, UpdateWebsiteRequest,
     UpdateWebsiteResponse, WebsiteResponse,
 };
+
 use crate::auth::get_user_id;
 use crate::cloudflare::CloudflareService;
 use crate::images::ImageService;
