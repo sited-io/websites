@@ -26,6 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let jwks_url = get_env_var("JWKS_URL");
     let jwks_host = get_env_var("JWKS_HOST");
 
+    tracing::debug!("Initializing database connection");
     let db_pool = init_db_pool(
         get_env_var("DB_HOST"),
         get_env_var("DB_PORT").parse().unwrap(),
@@ -34,15 +35,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         get_env_var("DB_DBNAME"),
         std::env::var("DB_ROOT_CERT").ok(),
     )?;
+    tracing::debug!("Running database migrations");
     migrate(&db_pool).await?;
 
+    tracing::debug!("Initializing CloudflareService");
     let cloudflare_service = CloudflareService::init(
         get_env_var("CLOUDFLARE_API_URL"),
         get_env_var("CLOUDFLARE_ZONE_ID"),
         get_env_var("CLOUDFLARE_API_TOKEN"),
     );
 
-    // initialize s3 bucket
+    tracing::debug!("Initializing ImageService");
     let image_service = ImageService::new(
         get_env_var("BUCKET_NAME"),
         get_env_var("BUCKET_ENDPOINT"),
@@ -53,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await;
 
-    // initialize publisher
+    tracing::debug!("Initializing Publisher");
     let publisher = Publisher::new(
         async_nats::ConnectOptions::new()
             .user_and_password(
@@ -70,6 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .set_serving::<WebsiteServiceServer<WebsiteService>>()
         .await;
 
+    tracing::debug!("Initializing WebsiteService");
     let website_service = WebsiteService::build(
         db_pool.clone(),
         init_jwks_verifier(&jwks_host, &jwks_url)?,
@@ -86,12 +90,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         publisher,
     );
 
+    tracing::debug!("Initializing CustomizationService");
     let customization_service = CustomizationService::build(
         db_pool.clone(),
         init_jwks_verifier(&jwks_host, &jwks_url)?,
         image_service,
     );
 
+    tracing::debug!("Initializing DomainService");
     let domain_service = DomainService::build(
         db_pool.clone(),
         init_jwks_verifier(&jwks_host, &jwks_url)?,
@@ -99,11 +105,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cloudflare_service,
     );
 
+    tracing::debug!("Initializing PageService");
     let page_service = PageService::build(
         db_pool.clone(),
         init_jwks_verifier(&jwks_host, &jwks_url)?,
     );
 
+    tracing::debug!("Initializing StaticPageService");
     let static_page_service = StaticPageService::build(
         db_pool,
         init_jwks_verifier(&jwks_host, &jwks_url)?,
