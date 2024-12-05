@@ -37,7 +37,7 @@ job "websites" {
       }
 
       vault {
-        policies = ["service-webistes"]
+        policies = ["service-websites"]
       }
 
       template {
