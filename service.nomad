@@ -51,14 +51,14 @@ RUST_LOG='{{ .RUST_LOG }}'
 
 HOST='0.0.0.0:{{ env "NOMAD_PORT_grpc" }}'
 
-DB_HOST='{{ env "NOMAD_UPSTREAM_IP_postgres-sql" }}'
-DB_PORT='{{ env "NOMAD_UPSTREAM_PORT_postgres-sql" }}'
 {{ with nomadVar "nomad/jobs/websites"}}
+DB_HOST='{{ .DB_HOST }}'
+DB_PORT='{{ .DB_PORT }}'
 DB_DBNAME='{{ .DB_DBNAME }}'
 DB_USER='{{ .DB_USER }}'
 {{ end }}
-{{ with secret "database/static-creds/websites_user" }}
-DB_PASSWORD='{{ .Data.password }}'
+{{ with secret "kv2/data/services/websites" }}
+DB_PASSWORD='{{ .Data.data.DB_PASSWORD }}'
 {{ end }}
 
 {{ with nomadVar "nomad/jobs/" }}
