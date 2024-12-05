@@ -75,7 +75,7 @@ FALLBACK_DOMAIN='{{ .FALLBACK_DOMAIN }}'
 ZITADEL_API_URL='{{ .ZITADEL_API_URL }}'
 ZITADEL_PROJECT_ID='{{ .ZITADEL_PROJECT_ID }}'
 {{ end }}
-{{ with secret "kv2/data/services" }}
+{{ with secret "kv2/data/services/websites" }}
 ZITADEL_API_TOKEN='{{ .Data.data.ZITADEL_API_TOKEN }}'
 {{ end }}
 
@@ -83,7 +83,7 @@ ZITADEL_API_TOKEN='{{ .Data.data.ZITADEL_API_TOKEN }}'
 CLOUDFLARE_API_URL='{{ .CLOUDFLARE_API_URL }}'
 CLOUDFLARE_ZONE_ID='{{ .CLOUDFLARE_ZONE_ID }}'
 {{ end }}
-{{ with secret "kv2/data/services" }}
+{{ with secret "kv2/data/services/websites" }}
 CLOUDFLARE_API_TOKEN='{{ .Data.data.CLOUDFLARE_API_TOKEN }}'
 {{ end }}
 
@@ -93,7 +93,7 @@ BUCKET_ENDPOINT='{{ .BUCKET_ENDPOINT }}'
 BUCKET_URL='{{ .BUCKET_URL }}'
 IMAGE_MAX_SIZE='{{ .IMAGE_MAX_SIZE }}'
 {{ end }}
-{{ with secret "kv2/data/services" }}
+{{ with secret "kv2/data/services/websites" }}
 BUCKET_ACCESS_KEY_ID='{{ .Data.data.BUCKET_ACCESS_KEY_ID }}'
 BUCKET_SECRET_ACCESS_KEY='{{ .Data.data.BUCKET_SECRET_ACCESS_KEY }}'
 {{ end }}
@@ -102,7 +102,7 @@ BUCKET_SECRET_ACCESS_KEY='{{ .Data.data.BUCKET_SECRET_ACCESS_KEY }}'
 NATS_HOST='{{ .NATS_HOST }}'
 NATS_USER='{{ .NATS_USER }}'
 {{ end }}
-{{ with secret "kv2/data/services" }}
+{{ with secret "kv2/data/services/websites" }}
 NATS_PASSWORD='{{ .Data.data.NATS_PASSWORD }}'
 {{ end }}
 EOF
