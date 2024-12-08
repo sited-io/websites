@@ -3,7 +3,7 @@ job "websites" {
   type        = "service"
 
   group "websites-api" {
-    count = 1
+    count = 2
 
     network {
       mode = "bridge"
@@ -19,11 +19,21 @@ job "websites" {
         sidecar_service {
           proxy {
             upstreams {
+              destination_name = "nats"
+              local_bind_port = 4222
+            }
+            upstreams {
               destination_name = "postgres-sql"
               local_bind_port  = 5432
             }
           }
         }
+      }
+
+      check {
+        type     = "grpc"
+        interval = "20s"
+        timeout  = "2s"
       }
     }
 
@@ -61,6 +71,10 @@ RUST_LOG='{{ .RUST_LOG }}'
 {{ end }}
 
 HOST='0.0.0.0:{{ env "NOMAD_PORT_grpc" }}'
+
+NATS_HOST='{{ env "NOMAD_ADDR_nats" }}'
+NATS_USER='{{- with nomadVar "nomad/jobs" -}}{{ .NATS_USER }}{{- end -}}'
+NATS_PASSWORD='{{- with secret "kv2/data/services" -}}{{ .Data.data.NATS_PASSWORD }}{{- end -}}'
 
 {{ with nomadVar "nomad/jobs/websites"}}
 DB_HOST='{{ .DB_HOST }}'
@@ -108,14 +122,6 @@ IMAGE_MAX_SIZE='{{ .IMAGE_MAX_SIZE }}'
 {{ with secret "kv2/data/services/websites" }}
 BUCKET_ACCESS_KEY_ID='{{ .Data.data.BUCKET_ACCESS_KEY_ID }}'
 BUCKET_SECRET_ACCESS_KEY='{{ .Data.data.BUCKET_SECRET_ACCESS_KEY }}'
-{{ end }}
-
-{{ with nomadVar "nomad/jobs/websites" }}
-NATS_HOST='{{ .NATS_HOST }}'
-NATS_USER='{{ .NATS_USER }}'
-{{ end }}
-{{ with secret "kv2/data/services/websites" }}
-NATS_PASSWORD='{{ .Data.data.NATS_PASSWORD }}'
 {{ end }}
 EOF
       }
