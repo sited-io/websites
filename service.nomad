@@ -72,7 +72,7 @@ RUST_LOG='{{ .RUST_LOG }}'
 
 HOST='0.0.0.0:{{ env "NOMAD_PORT_grpc" }}'
 
-NATS_HOST='{{ env "NOMAD_ADDR_nats" }}'
+NATS_HOST='{{ env "NOMAD_UPSTREAM_ADDR_nats" }}'
 NATS_USER='{{- with nomadVar "nomad/jobs" -}}{{ .NATS_USER }}{{- end -}}'
 NATS_PASSWORD='{{- with secret "kv2/data/services" -}}{{ .Data.data.NATS_PASSWORD }}{{- end -}}'
 
