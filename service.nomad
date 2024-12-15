@@ -41,9 +41,9 @@ job "websites" {
       driver = "docker"
 
       resources {
-        cpu        = 100
-        memory     = 256
-        memory_max = 256
+        cpu        = 400
+        memory     = 400
+        memory_max = 800
       }
 
       vault {
