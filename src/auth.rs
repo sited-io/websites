@@ -41,7 +41,10 @@ fn get_token(metadata: &MetadataMap) -> Result<String, Status> {
         .and_then(|v| v.to_str().ok())
         .and_then(|header_value| header_value.split_once(' '))
         .map(|(_, token)| token.to_string())
-        .ok_or_else(|| Status::unauthenticated(""))
+        .ok_or_else(|| {
+            tracing::error!("[auth.get_token] Error getting token from Authorization header");
+            Status::unauthenticated("")
+        })
 }
 
 pub async fn get_user_id(
@@ -53,11 +56,19 @@ pub async fn get_user_id(
     verifier
         .verify::<()>(&token)
         .await
-        .map_err(|err| Status::unauthenticated(err.to_string()))?
+        .map_err(|err| {
+            tracing::error!("[auth.get_user_id] Error verifying token {}", err);
+            Status::unauthenticated(err.to_string())
+        })?
         .claims()
         .sub
         .clone()
-        .ok_or_else(|| Status::unauthenticated(""))
+        .ok_or_else(|| {
+            tracing::error!(
+                "[auth.get_user_id] Error getting claim 'sub' from token"
+            );
+            Status::unauthenticated("")
+        })
 }
 
 pub async fn verify_service_user(
@@ -66,19 +77,34 @@ pub async fn verify_service_user(
 ) -> Result<(), Status> {
     let token = get_token(metadata)?;
 
-    if matches!(
+    let verified =
         verifier
             .verify::<ExtraClaims>(&token)
             .await
-            .map_err(|err| Status::unauthenticated(err.to_string()))?
+            .map_err(|err| {
+                tracing::error!(
+                    "[auth.verify_service_user] Error verifying token {}",
+                    err
+                );
+                Status::unauthenticated(err.to_string())
+            })?;
+
+    let role =
+        verified
             .claims()
             .extra
             .metadata
-            .get("role"),
-        Some(role) if role == "c2VydmljZQ" // 'service' in base64
-    ) {
+            .get("role")
+            .ok_or_else(|| {
+                tracing::error!("[auth.verify_service_user] Error getting claim 'role' from token");
+                Status::unauthenticated("")
+            })?;
+
+    // 'c2VydmljZQ' == 'service' in base64
+    if role == "c2VydmljZQ" {
         Ok(())
     } else {
+        tracing::error!("[auth.verify_service_user] Error role was not 'service', got role {}", role);
         Err(Status::unauthenticated(""))
     }
 }
