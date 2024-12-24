@@ -83,7 +83,7 @@ pub async fn verify_service_user(
             .await
             .map_err(|err| {
                 tracing::error!(
-                    "[auth.verify_service_user] Error verifying token {}",
+                    "[auth.verify_service_user] Error verifying token '{}'",
                     err
                 );
                 Status::unauthenticated(err.to_string())
@@ -104,7 +104,7 @@ pub async fn verify_service_user(
     if role == "c2VydmljZQ" {
         Ok(())
     } else {
-        tracing::error!("[auth.verify_service_user] Error role was not 'service', got role {}", role);
+        tracing::error!("[auth.verify_service_user] Error role was not 'service', got role '{}'", role);
         Err(Status::unauthenticated(""))
     }
 }
