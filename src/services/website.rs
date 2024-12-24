@@ -8,11 +8,12 @@ use service_apis::sited_io::websites::v1::{
     website_service_server, CreateWebsiteRequest, CreateWebsiteResponse,
     DeleteWebsiteRequest, DeleteWebsiteResponse, DomainStatus,
     GetWebsiteRequest, GetWebsiteResponse, ListWebsitesRequest,
-    ListWebsitesResponse, PageType, UpdateWebsiteRequest,
-    UpdateWebsiteResponse, WebsiteResponse,
+    ListWebsitesResponse, PageType, ReplayWebsitesRequest,
+    ReplayWebsitesResponse, UpdateWebsiteRequest, UpdateWebsiteResponse,
+    WebsiteResponse,
 };
 
-use crate::auth::get_user_id;
+use crate::auth::{get_user_id, verify_service_user};
 use crate::cloudflare::CloudflareService;
 use crate::images::ImageService;
 use crate::model::{Customization, Domain, Page, Website};
@@ -101,6 +102,14 @@ impl WebsiteService {
     fn build_main_domain(&self, website_id: &String) -> String {
         format!("{}.{}", website_id, self.main_domain)
     }
+
+    fn build_redirect_uri(domain: &str) -> String {
+        format!("https://{}/user/sign-in-callback", domain)
+    }
+
+    fn build_post_logout_redirect_uri(domain: &str) -> String {
+        format!("https://{}", domain)
+    }
 }
 
 #[async_trait]
@@ -128,44 +137,36 @@ impl website_service_server::WebsiteService for WebsiteService {
         let domain = self.build_main_domain(&website_id);
 
         let mut zitadel_service = self.zitadel_service.clone();
-        let redirect_uri = format!("https://{}/user/sign-in-callback", domain);
-        let post_logout_redirect_uri = format!("https://{}", domain);
 
-        let res = match zitadel_service
+        let res = zitadel_service
             .add_app(
                 domain.clone(),
-                vec![redirect_uri],
-                vec![post_logout_redirect_uri],
+                vec![Self::build_redirect_uri(&domain)],
+                vec![Self::build_post_logout_redirect_uri(&domain)],
             )
             .await
-        {
-            Ok(res) => res,
-            Err(err) => {
+            .map_err(|err| {
                 tracing::log::error!(
                     "[WebsiteService.create_website] add_app: {}",
                     err
                 );
-                return Err(Status::internal("Could not create ZITADEL app"));
-            }
-        };
+                Status::internal("Could not create ZITADEL app")
+            })?;
 
         let AddOidcAppResponse {
             client_id, app_id, ..
         } = res.into_inner();
 
-        if let Err(err) = self
-            .cloudflare_service
+        self.cloudflare_service
             .create_dns_record(domain.clone(), self.fallback_domain.clone())
             .await
-        {
-            tracing::log::error!(
-                "[WebsiteService.create_website] create_dns_record: {}",
-                err
-            );
-            return Err(Status::internal(
-                "Error while adding dns record to cloudflare",
-            ));
-        }
+            .map_err(|err| {
+                tracing::log::error!(
+                    "[WebsiteService.create_website] create_dns_record: {}",
+                    err
+                );
+                Status::internal("Error while adding dns record to cloudflare")
+            })?;
 
         let created_website = Website::create(
             &self.pool,
@@ -253,7 +254,7 @@ impl website_service_server::WebsiteService for WebsiteService {
             get_limit_offset_from_pagination(pagination)?;
 
         let (found_websites, count) =
-            Website::list(&self.pool, &user_id, limit, offset).await?;
+            Website::list_expanded(&self.pool, &user_id, limit, offset).await?;
 
         pagination.total_elements = i64_to_u32(count)?;
 
@@ -279,8 +280,15 @@ impl website_service_server::WebsiteService for WebsiteService {
             return Err(Status::invalid_argument("name is too short"));
         }
 
-        let updated_website =
-            Website::update(&self.pool, &website_id, &user_id, &name).await?;
+        let updated_website = Website::update(
+            &self.pool,
+            &website_id,
+            &user_id,
+            &name,
+            &None,
+            &None,
+        )
+        .await?;
 
         let website_response = self.to_response(updated_website);
 
@@ -365,5 +373,80 @@ impl website_service_server::WebsiteService for WebsiteService {
             .await;
 
         Ok(Response::new(DeleteWebsiteResponse::default()))
+    }
+
+    async fn replay_websites(
+        &self,
+        request: Request<ReplayWebsitesRequest>,
+    ) -> Result<Response<ReplayWebsitesResponse>, Status> {
+        verify_service_user(&request.metadata(), &self.verifier).await?;
+
+        let websites = Website::list(&self.pool).await?;
+        let mut zitadel_service = self.zitadel_service.clone();
+
+        for website in websites {
+            let domain = self.build_main_domain(&website.website_id);
+
+            match zitadel_service.get_app_by_name(&domain).await {
+                Ok(Some(_app)) => {
+                    // TODO: check client_id and app_id
+                }
+                Ok(None) => {
+                    let res = match zitadel_service
+                        .add_app(
+                            domain.clone(),
+                            vec![Self::build_redirect_uri(&domain)],
+                            vec![Self::build_post_logout_redirect_uri(&domain)],
+                        )
+                        .await
+                    {
+                        Ok(res) => res,
+                        Err(err) => {
+                            tracing::log::error!(
+                            "[WebsiteService.replay_websites] Error add_app: {}",
+                            err
+                        );
+                            continue;
+                        }
+                    };
+
+                    let AddOidcAppResponse {
+                        client_id, app_id, ..
+                    } = res.into_inner();
+
+                    if let Err(err) = Website::update(
+                        &self.pool,
+                        &website.website_id,
+                        &website.user_id,
+                        &None,
+                        &Some(client_id),
+                        &Some(app_id),
+                    )
+                    .await
+                    {
+                        tracing::log::error!(
+                        "[WebsiteService.replay_websites] Error update website: {}",
+                        err
+                    );
+                        continue;
+                    };
+
+                    if let Ok(Some(website)) =
+                        Website::get(&self.pool, &website.website_id).await
+                    {
+                        self.publisher
+                            .publish_website(&self.to_response(website), false)
+                            .await
+                    } else {
+                        tracing::error!("[WebsiteService.replay_websites] Error getting website: {}", website.website_id)
+                    }
+                }
+                Err(err) => {
+                    tracing::error!("[WebsiteService.replay_websites] Error getting app from ZITADEL: {}", err)
+                }
+            }
+        }
+
+        Ok(Response::new(ReplayWebsitesResponse {}))
     }
 }

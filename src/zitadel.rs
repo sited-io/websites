@@ -1,14 +1,16 @@
 use tonic::transport::Channel;
 use tonic::{Request, Response, Status};
 use zitadel::api::zitadel::app::v1::{
-    OidcAppType, OidcAuthMethodType, OidcGrantType, OidcResponseType,
+    App, AppNameQuery, AppQuery, OidcAppType, OidcAuthMethodType,
+    OidcGrantType, OidcResponseType,
 };
 use zitadel::api::zitadel::management::v1::management_service_client::ManagementServiceClient;
 use zitadel::api::zitadel::management::v1::{
     AddOidcAppRequest, AddOidcAppResponse, GetAppByIdRequest,
-    GetAppByIdResponse, RemoveAppRequest, RemoveAppResponse,
+    GetAppByIdResponse, ListAppsRequest, RemoveAppRequest, RemoveAppResponse,
 };
 use zitadel::api::zitadel::user::v1::AccessTokenType;
+use zitadel::api::zitadel::v1::{ListQuery, TextQueryMethod};
 
 #[derive(Debug, Clone)]
 pub struct ZitadelService {
@@ -70,6 +72,47 @@ impl ZitadelService {
         req.metadata_mut()
             .insert("authorization", self.service_user_token.parse().unwrap());
         self.management_service_client.get_app_by_id(req).await
+    }
+
+    pub async fn get_app_by_name(
+        &mut self,
+        name: &String,
+    ) -> Result<Option<App>, Status> {
+        let mut req = Request::new(ListAppsRequest {
+            project_id: self.project_id.clone(),
+            query: Some(ListQuery {
+                offset: 0,
+                limit: 1,
+                asc: true,
+            }),
+            queries: vec![AppQuery {
+                query: Some(
+                    zitadel::api::zitadel::app::v1::app_query::Query::NameQuery(
+                        AppNameQuery {
+                            name: name.to_owned(),
+                            method: TextQueryMethod::EqualsIgnoreCase.into(),
+                        },
+                    ),
+                ),
+            }],
+        });
+        req.metadata_mut()
+            .insert("authorization", self.service_user_token.parse().unwrap());
+
+        Ok(self
+            .management_service_client
+            .list_apps(req)
+            .await
+            .map_err(|err| {
+                tracing::error!(
+                    "Error while getting ZITADEL app by name {err}"
+                );
+                Status::not_found("")
+            })?
+            .into_inner()
+            .result
+            .first()
+            .cloned())
     }
 
     pub async fn remove_app(

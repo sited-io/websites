@@ -174,7 +174,20 @@ impl Website {
         Ok(row.map(Self::from))
     }
 
-    pub async fn list(
+    pub async fn list(pool: &Pool) -> Result<Vec<Self>, DbError> {
+        let conn = pool.get().await?;
+
+        let (sql, values) = Query::select()
+            .column((WebsiteIden::Table, Asterisk))
+            .from(WebsiteIden::Table)
+            .build_postgres(PostgresQueryBuilder);
+
+        let rows = conn.query(sql.as_str(), &values.as_params()).await?;
+
+        Ok(rows.iter().map(Self::from).collect())
+    }
+
+    pub async fn list_expanded(
         pool: &Pool,
         user_id: &Option<String>,
         limit: u64,
@@ -220,6 +233,8 @@ impl Website {
         website_id: &String,
         user_id: &String,
         name: &Option<String>,
+        client_id: &Option<String>,
+        zitadel_app_id: &Option<String>,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
 
@@ -229,6 +244,14 @@ impl Website {
 
             if let Some(name) = name {
                 query.value(WebsiteIden::Name, name);
+            }
+
+            if let Some(client_id) = client_id {
+                query.value(WebsiteIden::ClientId, client_id);
+            }
+
+            if let Some(zitadel_app_id) = zitadel_app_id {
+                query.value(WebsiteIden::ZitadelAppId, zitadel_app_id);
             }
 
             query

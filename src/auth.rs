@@ -59,3 +59,26 @@ pub async fn get_user_id(
         .clone()
         .ok_or_else(|| Status::unauthenticated(""))
 }
+
+pub async fn verify_service_user(
+    metadata: &MetadataMap,
+    verifier: &RemoteJwksVerifier,
+) -> Result<(), Status> {
+    let token = get_token(metadata)?;
+
+    if matches!(
+        verifier
+            .verify::<ExtraClaims>(&token)
+            .await
+            .map_err(|err| Status::unauthenticated(err.to_string()))?
+            .claims()
+            .extra
+            .metadata
+            .get("role"),
+        Some(role) if role == "c2VydmljZQ" // 'service' in base64
+    ) {
+        Ok(())
+    } else {
+        Err(Status::unauthenticated(""))
+    }
+}
