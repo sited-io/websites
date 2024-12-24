@@ -26,6 +26,10 @@ job "websites" {
               destination_name = "postgres-sql"
               local_bind_port  = 5432
             }
+            upstreams {
+              destination_name = "zitadel"
+              local_bind_port = 8080
+            }
           }
         }
       }
@@ -89,16 +93,16 @@ DB_PASSWORD='{{ .Data.data.DB_PASSWORD }}'
 
 {{ with nomadVar "nomad/jobs/" }}
 JWKS_HOST='{{ .JWKS_HOST }}'
-JWKS_URL='{{ .JWKS_URL }}'
 {{ end }}
+JWKS_URL='http://{{ env "NOMAD_UPSTREAM_ADDR_zitadel" }}/oauth/v2/keys'
 
 {{ with nomadVar "nomad/jobs/websites" }}
 MAIN_DOMAIN='{{ .MAIN_DOMAIN }}'
 FALLBACK_DOMAIN='{{ .FALLBACK_DOMAIN }}'
 {{ end }}
 
+ZITADEL_API_URL='http://{{ env "NOMAD_UPSTREAM_ADDR_zitadel" }}/'
 {{ with nomadVar "nomad/jobs/websites" }}
-ZITADEL_API_URL='{{ .ZITADEL_API_URL }}'
 ZITADEL_PROJECT_ID='{{ .ZITADEL_PROJECT_ID }}'
 {{ end }}
 {{ with secret "kv2/data/services/websites" }}
