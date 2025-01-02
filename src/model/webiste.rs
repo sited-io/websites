@@ -232,9 +232,9 @@ impl Website {
         pool: &Pool,
         website_id: &String,
         user_id: &String,
-        name: &Option<String>,
-        client_id: &Option<String>,
-        zitadel_app_id: &Option<String>,
+        name: Option<&String>,
+        client_id: Option<&String>,
+        zitadel_app_id: Option<&String>,
     ) -> Result<Self, DbError> {
         let conn = pool.get().await?;
 

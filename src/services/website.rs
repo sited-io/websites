@@ -1,6 +1,7 @@
 use deadpool_postgres::Pool;
 use jwtk::jwk::RemoteJwksVerifier;
 use tonic::{async_trait, Request, Response, Status};
+use zitadel::api::zitadel::app::v1::app;
 use zitadel::api::zitadel::management::v1::AddOidcAppResponse;
 
 use service_apis::sited_io::websites::v1::website_service_server::WebsiteServiceServer;
@@ -30,7 +31,6 @@ pub struct WebsiteService {
     pool: Pool,
     verifier: RemoteJwksVerifier,
     main_domain: String,
-    fallback_domain: String,
     zitadel_service: ZitadelService,
     cloudflare_service: CloudflareService,
     image_service: ImageService,
@@ -53,7 +53,6 @@ impl WebsiteService {
         pool: Pool,
         verifier: RemoteJwksVerifier,
         main_domain: String,
-        fallback_domain: String,
         zitadel_service: ZitadelService,
         cloudflare_service: CloudflareService,
         image_service: ImageService,
@@ -63,7 +62,6 @@ impl WebsiteService {
             pool,
             verifier,
             main_domain,
-            fallback_domain,
             zitadel_service,
             cloudflare_service,
             image_service,
@@ -109,6 +107,41 @@ impl WebsiteService {
 
     fn build_post_logout_redirect_uri(domain: &str) -> String {
         format!("https://{}", domain)
+    }
+
+    async fn update_website_and_publish(
+        &self,
+        website: &Website,
+        client_id: &String,
+        app_id: &String,
+    ) {
+        if let Err(err) = Website::update(
+            &self.pool,
+            &website.website_id,
+            &website.user_id,
+            None,
+            Some(client_id),
+            Some(app_id),
+        )
+        .await
+        {
+            tracing::log::error!("Error update website: {}", err);
+        };
+
+        if let Ok(Some(website)) =
+            Website::get(&self.pool, &website.website_id).await
+        {
+            tracing::info!(
+                "Created ZITADEL app for website_id '{}'",
+                website.website_id
+            );
+
+            self.publisher
+                .publish_website(&self.to_response(website), false)
+                .await;
+        } else {
+            tracing::error!("Error getting website: {}", website.website_id);
+        }
     }
 }
 
@@ -156,17 +189,6 @@ impl website_service_server::WebsiteService for WebsiteService {
         let AddOidcAppResponse {
             client_id, app_id, ..
         } = res.into_inner();
-
-        self.cloudflare_service
-            .create_dns_record(domain.clone(), self.fallback_domain.clone())
-            .await
-            .map_err(|err| {
-                tracing::log::error!(
-                    "[WebsiteService.create_website] create_dns_record: {}",
-                    err
-                );
-                Status::internal("Error while adding dns record to cloudflare")
-            })?;
 
         let created_website = Website::create(
             &self.pool,
@@ -284,9 +306,9 @@ impl website_service_server::WebsiteService for WebsiteService {
             &self.pool,
             &website_id,
             &user_id,
-            &name,
-            &None,
-            &None,
+            name.as_ref(),
+            None,
+            None,
         )
         .await?;
 
@@ -330,14 +352,6 @@ impl website_service_server::WebsiteService for WebsiteService {
         }
 
         for domain in found_website.domains {
-            let found_records = self
-                .cloudflare_service
-                .list_dns_records(Some(domain.domain.clone()))
-                .await?;
-            for record in found_records.result {
-                self.cloudflare_service.delete_dns_record(record.id).await?;
-            }
-
             if domain.status == DomainStatus::Active.as_str_name() {
                 let found_custom_hostnames = self
                     .cloudflare_service
@@ -379,7 +393,7 @@ impl website_service_server::WebsiteService for WebsiteService {
         &self,
         request: Request<ReplayWebsitesRequest>,
     ) -> Result<Response<ReplayWebsitesResponse>, Status> {
-        verify_service_user(&request.metadata(), &self.verifier).await?;
+        verify_service_user(request.metadata(), &self.verifier).await?;
 
         let websites = Website::list(&self.pool).await?;
         let mut zitadel_service = self.zitadel_service.clone();
@@ -388,8 +402,47 @@ impl website_service_server::WebsiteService for WebsiteService {
             let domain = self.build_main_domain(&website.website_id);
 
             match zitadel_service.get_app_by_name(&domain).await {
-                Ok(Some(_app)) => {
-                    // TODO: check client_id and app_id
+                Ok(Some(app)) => {
+                    let app_id = app.id;
+                    if let Some(app::Config::OidcConfig(oidc_config)) =
+                        app.config
+                    {
+                        let client_id = oidc_config.client_id;
+
+                        if website.zitadel_app_id != app_id
+                            || website.client_id != client_id
+                        {
+                            tracing::info!("[WebsiteService.replay_websites] Inconsistent app or client ids. DB: app_id = {} client_id = {}, ZITADEL: app_id = {} client_id = {}", website.zitadel_app_id, website.client_id, app_id, client_id);
+
+                            self.update_website_and_publish(
+                                &website, &client_id, &app_id,
+                            )
+                            .await;
+                        }
+
+                        let redirect_uri = Self::build_redirect_uri(&domain);
+                        let post_logout_redirect_uri =
+                            Self::build_post_logout_redirect_uri(&domain);
+
+                        if !oidc_config.redirect_uris.contains(&redirect_uri)
+                            || !oidc_config
+                                .post_logout_redirect_uris
+                                .contains(&post_logout_redirect_uri)
+                        {
+                            tracing::info!("[WebsiteService.replay_websites] Missing redirect uris in website '{}'", website.website_id);
+
+                            if let Err(err) = zitadel_service
+                                .update_app(
+                                    &app_id,
+                                    vec![redirect_uri],
+                                    vec![post_logout_redirect_uri],
+                                )
+                                .await
+                            {
+                                tracing::log::error!("[WebsiteService.replay_websites] Error update app: {}", err);
+                            }
+                        }
+                    }
                 }
                 Ok(None) => {
                     let res = match zitadel_service
@@ -414,32 +467,10 @@ impl website_service_server::WebsiteService for WebsiteService {
                         client_id, app_id, ..
                     } = res.into_inner();
 
-                    if let Err(err) = Website::update(
-                        &self.pool,
-                        &website.website_id,
-                        &website.user_id,
-                        &None,
-                        &Some(client_id),
-                        &Some(app_id),
+                    self.update_website_and_publish(
+                        &website, &client_id, &app_id,
                     )
-                    .await
-                    {
-                        tracing::log::error!(
-                        "[WebsiteService.replay_websites] Error update website: {}",
-                        err
-                    );
-                        continue;
-                    };
-
-                    if let Ok(Some(website)) =
-                        Website::get(&self.pool, &website.website_id).await
-                    {
-                        self.publisher
-                            .publish_website(&self.to_response(website), false)
-                            .await
-                    } else {
-                        tracing::error!("[WebsiteService.replay_websites] Error getting website: {}", website.website_id)
-                    }
+                    .await;
                 }
                 Err(err) => {
                     tracing::error!("[WebsiteService.replay_websites] Error getting app from ZITADEL: {}", err)

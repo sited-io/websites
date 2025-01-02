@@ -6,16 +6,6 @@ use serde::{Deserialize, Serialize};
 use tonic::Status;
 
 #[derive(Debug, Serialize)]
-struct CreateDnsRecordRequest {
-    content: String,
-    name: String,
-    proxied: bool,
-    #[serde(rename = "type")]
-    _type: String,
-    ttl: usize,
-}
-
-#[derive(Debug, Serialize)]
 struct CreateCustomHostnameRequest {
     hostname: String,
     ssl: CreateCustomHostnameSslRequest,
@@ -107,100 +97,6 @@ impl CloudflareService {
             zone_id,
             client,
         }
-    }
-
-    pub async fn create_dns_record(
-        &self,
-        name: String,
-        content: String,
-    ) -> Result<CloudflareResponse<DnsRecordResponse>, Status> {
-        let body = CreateDnsRecordRequest {
-            name,
-            content,
-            proxied: true,
-            _type: "CNAME".to_string(),
-            ttl: 1,
-        };
-
-        self.client
-            .post(format!(
-                "{}/zones/{}/dns_records",
-                self.api_url, self.zone_id
-            ))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|err| {
-                tracing::log::error!(
-                    "[CloudflareService.create_dns_record]: {:?}",
-                    err
-                );
-                Status::internal("")
-            })?
-            .json()
-            .await
-            .map_err(|err| {
-                tracing::log::error!(
-                    "[CloudflareService.create_dns_record]: {:?}",
-                    err
-                );
-                Status::internal("")
-            })
-    }
-
-    pub async fn list_dns_records(
-        &self,
-        name: Option<String>,
-    ) -> Result<CloudflareResponses<DnsRecordResponse>, Status> {
-        let mut req = self.client.get(format!(
-            "{}/zones/{}/dns_records",
-            self.api_url, self.zone_id
-        ));
-
-        if let Some(name) = name {
-            req = req.query(&[("name", name)]);
-        }
-
-        req.send()
-            .await
-            .map_err(|err| {
-                tracing::log::error!(
-                    "[CloudflareService.list_dns_records]: {:?}",
-                    err
-                );
-                Status::internal("")
-            })?
-            .json()
-            .await
-            .map_err(|err| {
-                tracing::log::error!(
-                    "[CloudflareService.list_dns_records]: {:?}",
-                    err
-                );
-                Status::internal("")
-            })
-    }
-
-    pub async fn delete_dns_record(
-        &self,
-        record_id: String,
-    ) -> Result<(), Status> {
-        self.client
-            .delete(format!(
-                "{}/zones/{}/dns_records/{}",
-                self.api_url, self.zone_id, record_id
-            ))
-            .send()
-            .await
-            .map_err(|err| {
-                tracing::log::error!(
-                    "[CloudflareService.delete_dns_record]: {:?}",
-                    err
-                );
-                Status::internal("")
-            })?;
-
-        Ok(())
     }
 
     pub async fn create_custom_hostname(

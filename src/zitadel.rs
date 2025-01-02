@@ -8,6 +8,7 @@ use zitadel::api::zitadel::management::v1::management_service_client::Management
 use zitadel::api::zitadel::management::v1::{
     AddOidcAppRequest, AddOidcAppResponse, GetAppByIdRequest,
     GetAppByIdResponse, ListAppsRequest, RemoveAppRequest, RemoveAppResponse,
+    UpdateOidcAppConfigRequest, UpdateOidcAppConfigResponse,
 };
 use zitadel::api::zitadel::user::v1::AccessTokenType;
 use zitadel::api::zitadel::v1::{ListQuery, TextQueryMethod};
@@ -113,6 +114,26 @@ impl ZitadelService {
             .result
             .first()
             .cloned())
+    }
+
+    pub async fn update_app(
+        &mut self,
+        app_id: &str,
+        redirect_uris: Vec<String>,
+        post_logout_redirect_uris: Vec<String>,
+    ) -> Result<Response<UpdateOidcAppConfigResponse>, Status> {
+        let mut req = Request::new(UpdateOidcAppConfigRequest {
+            project_id: self.project_id.clone(),
+            app_id: app_id.to_owned(),
+            redirect_uris,
+            post_logout_redirect_uris,
+            ..Default::default()
+        });
+        req.metadata_mut()
+            .insert("authorization", self.service_user_token.parse().unwrap());
+        self.management_service_client
+            .update_oidc_app_config(req)
+            .await
     }
 
     pub async fn remove_app(

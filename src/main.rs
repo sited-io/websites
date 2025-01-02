@@ -78,7 +78,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db_pool.clone(),
         init_jwks_verifier(&jwks_host, &jwks_url)?,
         get_env_var("MAIN_DOMAIN"),
-        get_env_var("FALLBACK_DOMAIN"),
         ZitadelService::init(
             get_env_var("ZITADEL_API_URL"),
             get_env_var("ZITADEL_API_TOKEN"),

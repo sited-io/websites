@@ -24,7 +24,9 @@ pub struct StaticPage {
     pub page_id: i64,
     pub website_id: String,
     pub user_id: String,
+    #[allow(unused)]
     pub created_at: DateTime<Utc>,
+    #[allow(unused)]
     pub updated_at: DateTime<Utc>,
     pub components: Value,
 }
