@@ -3,6 +3,11 @@ CREATE TABLE static_pages (
   website_id VARCHAR NOT NULL REFERENCES websites(website_id),
   user_id VARCHAR NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   components JSON
 );
+
+
+CREATE TRIGGER update_shops_updated_at BEFORE UPDATE
+    ON static_pages FOR EACH ROW EXECUTE PROCEDURE 
+    updated_at_now();

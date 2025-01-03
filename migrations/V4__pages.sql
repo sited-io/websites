@@ -3,7 +3,7 @@ CREATE TABLE pages (
   website_id VARCHAR NOT NULL REFERENCES websites(website_id),
   user_id VARCHAR NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   page_type VARCHAR NOT NULL,
   content_id VARCHAR NOT NULL,
   title VARCHAR NOT NULL,
@@ -11,4 +11,8 @@ CREATE TABLE pages (
 
   UNIQUE INDEX uq_pages_website_id_title (website_id, title),
   UNIQUE INDEX uq_pages_website_id_path (website_id, path)
-)
+);
+
+CREATE TRIGGER update_shops_updated_at BEFORE UPDATE
+    ON pages FOR EACH ROW EXECUTE PROCEDURE 
+    updated_at_now();
