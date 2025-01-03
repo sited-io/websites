@@ -7,11 +7,14 @@ CREATE TABLE pages (
   page_type VARCHAR NOT NULL,
   content_id VARCHAR NOT NULL,
   title VARCHAR NOT NULL,
-  path VARCHAR NOT NULL,
-
-  UNIQUE INDEX uq_pages_website_id_title (website_id, title),
-  UNIQUE INDEX uq_pages_website_id_path (website_id, path)
+  path VARCHAR NOT NULL
 );
+
+CREATE UNIQUE INDEX uq_pages_website_id_title
+  ON pages(website_id, title);
+
+CREATE UNIQUE INDEX uq_pages_website_id_path
+  ON pages(website_id, path);
 
 CREATE TRIGGER update_shops_updated_at BEFORE UPDATE
     ON pages FOR EACH ROW EXECUTE PROCEDURE 

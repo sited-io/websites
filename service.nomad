@@ -55,17 +55,6 @@ job "websites" {
       }
 
       template {
-        destination = "${NOMAD_SECRETS_DIR}/database_root_cert.crt"
-        env         = false 
-        change_mode = "restart"
-        data        = <<EOF
-{{- with secret "kv2/data/services" -}}
-{{ .Data.data.DATABASE_ROOT_CERT }}
-{{- end -}}
-EOF
-      }
-
-      template {
         destination = "${NOMAD_SECRETS_DIR}/.env"
         env         = true
         change_mode = "restart"
