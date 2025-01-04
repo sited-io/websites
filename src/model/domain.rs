@@ -29,7 +29,7 @@ pub enum DomainIden {
 
 #[derive(Debug, Clone)]
 pub struct Domain {
-    pub domain_id: i64,
+    pub domain_id: i32,
     pub website_id: String,
     pub user_id: String,
     pub created_at: DateTime<Utc>,
@@ -169,7 +169,7 @@ impl Domain {
 
     pub async fn update(
         pool: &Pool,
-        domain_id: i64,
+        domain_id: i32,
         website_id: &String,
         user_id: &String,
         status: &'static str,
@@ -214,7 +214,7 @@ impl Domain {
 
     pub async fn delete(
         pool: &Pool,
-        domain_id: i64,
+        domain_id: i32,
         website_id: &String,
         user_id: &String,
     ) -> Result<(), DbError> {
@@ -257,7 +257,7 @@ impl From<Row> for Domain {
 
 #[derive(Debug, Clone)]
 pub struct DomainAsRel {
-    pub domain_id: i64,
+    pub domain_id: i32,
     pub domain: String,
     pub status: String,
 }
@@ -308,8 +308,8 @@ impl<'a> FromSql<'a> for DomainAsRel {
         private::read_be_i32(&mut raw)?;
 
         let oid = private::read_be_i32(&mut raw)?;
-        let ty = get_type_from_oid::<i64>(oid)?;
-        let domain_id: i64 = private::read_value(&ty, &mut raw)?;
+        let ty = get_type_from_oid::<i32>(oid)?;
+        let domain_id: i32 = private::read_value(&ty, &mut raw)?;
 
         let oid = private::read_be_i32(&mut raw)?;
         let ty = get_type_from_oid::<String>(oid)?;

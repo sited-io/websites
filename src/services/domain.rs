@@ -43,7 +43,7 @@ impl DomainService {
     pub fn to_response(domain: impl Into<DomainAsRel>) -> DomainResponse {
         let domain: DomainAsRel = domain.into();
         DomainResponse {
-            domain_id: domain.domain_id,
+            domain_id: domain.domain_id.into(),
             domain: domain.domain,
             status: DomainStatus::from_str_name(&domain.status).unwrap().into(),
         }

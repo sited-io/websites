@@ -26,7 +26,14 @@ pub fn datetime_to_timestamp(datetime: DateTime<Utc>) -> u64 {
 
 pub fn i64_to_u32(n: i64) -> Result<u32, Status> {
     n.try_into().map_err(|err| {
-        tracing::log::error!("{:?}", err);
+        tracing::error!("{:?}", err);
+        Status::internal("")
+    })
+}
+
+pub fn i64_to_i32(i: i64) -> Result<i32, Status> {
+    i.try_into().map_err(|err| {
+        tracing::error!("{:?}", err);
         Status::internal("")
     })
 }

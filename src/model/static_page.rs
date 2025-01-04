@@ -21,7 +21,7 @@ pub enum StaticPageIden {
 
 #[derive(Debug, Clone)]
 pub struct StaticPage {
-    pub page_id: i64,
+    pub page_id: i32,
     pub website_id: String,
     pub user_id: String,
     #[allow(unused)]
@@ -34,7 +34,7 @@ pub struct StaticPage {
 impl StaticPage {
     pub async fn create(
         pool: &Pool,
-        page_id: i64,
+        page_id: i32,
         website_id: &String,
         user_id: &String,
         components: Value,
@@ -65,7 +65,7 @@ impl StaticPage {
 
     pub async fn get(
         pool: &Pool,
-        page_id: i64,
+        page_id: i32,
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
@@ -82,7 +82,7 @@ impl StaticPage {
 
     pub async fn update(
         pool: &Pool,
-        page_id: i64,
+        page_id: i32,
         user_id: &String,
         components: Value,
     ) -> Result<Self, DbError> {
@@ -110,7 +110,7 @@ impl StaticPage {
 
     pub async fn delete(
         pool: &Pool,
-        page_id: i64,
+        page_id: i32,
         user_id: &String,
     ) -> Result<(), DbError> {
         let conn = pool.get().await?;

@@ -32,7 +32,7 @@ pub enum PageIden {
 
 #[derive(Debug, Clone)]
 pub struct Page {
-    pub page_id: i64,
+    pub page_id: i32,
     pub website_id: String,
     pub user_id: String,
     pub created_at: DateTime<Utc>,
@@ -88,7 +88,7 @@ impl Page {
 
     pub async fn get(
         pool: &Pool,
-        page_id: i64,
+        page_id: i32,
     ) -> Result<Option<Self>, DbError> {
         let conn = pool.get().await?;
 
@@ -187,7 +187,7 @@ impl Page {
     #[allow(clippy::too_many_arguments)]
     pub async fn update(
         pool: &Pool,
-        page_id: i64,
+        page_id: i32,
         user_id: &String,
         page_type: Option<&str>,
         content_id: Option<String>,
@@ -237,7 +237,7 @@ impl Page {
 
     pub async fn delete(
         pool: &Pool,
-        page_id: i64,
+        page_id: i32,
         user_id: &String,
     ) -> Result<(), DbError> {
         let conn = pool.get().await?;
@@ -301,7 +301,7 @@ impl From<Row> for Page {
 
 #[derive(Debug, Clone)]
 pub struct PageAsRel {
-    pub page_id: i64,
+    pub page_id: i32,
     pub page_type: String,
     pub content_id: String,
     pub title: String,
@@ -357,8 +357,8 @@ impl<'a> FromSql<'a> for PageAsRel {
         private::read_be_i32(&mut raw)?;
 
         let oid = private::read_be_i32(&mut raw)?;
-        let ty = get_type_from_oid::<i64>(oid)?;
-        let page_id: i64 = private::read_value(&ty, &mut raw)?;
+        let ty = get_type_from_oid::<i32>(oid)?;
+        let page_id: i32 = private::read_value(&ty, &mut raw)?;
 
         let oid = private::read_be_i32(&mut raw)?;
         let ty = get_type_from_oid::<String>(oid)?;

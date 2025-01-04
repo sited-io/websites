@@ -15,8 +15,8 @@ use service_apis::sited_io::websites::v1::{
 };
 
 use crate::auth::get_user_id;
-use crate::i64_to_u32;
 use crate::model::{Page, PageAsRel, StaticPage, Website};
+use crate::{i64_to_i32, i64_to_u32};
 
 use super::get_limit_offset_from_pagination;
 
@@ -39,7 +39,7 @@ impl PageService {
     pub fn to_response(page: impl Into<PageAsRel>) -> PageResponse {
         let page: PageAsRel = page.into();
         PageResponse {
-            page_id: page.page_id,
+            page_id: page.page_id.into(),
             page_type: PageType::from_str_name(&page.page_type).unwrap().into(),
             content_id: page.content_id,
             title: page.title,
@@ -89,7 +89,7 @@ impl PageService {
 
     async fn ensure_static_page(
         &self,
-        page_id: i64,
+        page_id: i32,
         website_id: &String,
         user_id: &String,
     ) -> Result<(), Status> {
@@ -159,7 +159,7 @@ impl page_service_server::PageService for PageService {
 
         if page_type == PageType::Static {
             self.ensure_static_page(
-                created_page.page_id,
+                created_page.page_id.into(),
                 &website_id,
                 &user_id,
             )
@@ -182,7 +182,9 @@ impl page_service_server::PageService for PageService {
         } = request.into_inner();
 
         let found_page = match (page_id, website_id, path) {
-            (Some(page_id), _, _) => Page::get(&self.pool, page_id).await?,
+            (Some(page_id), _, _) => {
+                Page::get(&self.pool, i64_to_i32(page_id)?).await?
+            }
             (_, Some(website_id), Some(path)) => {
                 Page::get_by_path(&self.pool, &website_id, &path).await?
             }
@@ -233,6 +235,8 @@ impl page_service_server::PageService for PageService {
             is_home_page,
             mut path,
         } = request.into_inner();
+
+        let page_id = i64_to_i32(page_id)?;
 
         if matches!(is_home_page, Some(true)) {
             let found_page =
@@ -287,6 +291,7 @@ impl page_service_server::PageService for PageService {
         let user_id = get_user_id(request.metadata(), &self.verifier).await?;
 
         let DeletePageRequest { page_id } = request.into_inner();
+        let page_id = i64_to_i32(page_id)?;
 
         let found_page = Page::get(&self.pool, page_id)
             .await?
